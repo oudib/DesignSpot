@@ -1,0 +1,170 @@
+// Sobrus DS — data model
+// Hierarchy: Solution > Module > Submodule > Flow > Design (Claude design link)
+// Plus: Users (designers) and Tickets (designer work items).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (PgBouncer) used by the app at runtime.
+  url       = env("DATABASE_URL")
+  // Direct connection used for migrations / `prisma db push`.
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  role      String   @default("designer") // "designer" | "admin"
+  createdAt DateTime @default(now())
+
+  // Each designer connects their own Linear via a Personal API key, stored
+  // AES-GCM-encrypted (see src/lib/crypto.ts). Null = not connected.
+  linearApiKey String?
+
+  tickets  Ticket[]
+  comments Comment[]
+}
+
+model Solution {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  tagline     String   @default("")
+  description String   @default("")
+  color       String   @default("#3464f6") // accent color for the card
+  icon        String   @default("✦") // emoji / short label shown on the card
+  language    String   @default("en") // default UI language: "en" | "fr" | "mixed"
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  modules Module[]
+  tickets Ticket[]
+}
+
+model Module {
+  id         String   @id @default(cuid())
+  name       String
+  slug       String
+  order      Int      @default(0)
+  solutionId String
+  solution   Solution @relation(fields: [solutionId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  submodules Submodule[]
+
+  @@unique([solutionId, slug])
+}
+
+model Submodule {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String
+  order     Int      @default(0)
+  moduleId  String
+  module    Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  flows Flow[]
+
+  @@unique([moduleId, slug])
+}
+
+model Flow {
+  id            String   @id @default(cuid())
+  name          String
+  description   String   @default("")
+  order         Int      @default(0)
+  submoduleId   String
+  submodule     Submodule @relation(fields: [submoduleId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  designs       Design[]
+  linearTickets LinearTicket[]
+  tickets       Ticket[]
+}
+
+// A Linear ticket attached to a flow. A flow can have many, each dated,
+// so the design history of a flow can be tracked over time.
+model LinearTicket {
+  id        String   @id @default(cuid())
+  url       String
+  label     String   @default("") // optional, e.g. "Initial design", "Payment redesign"
+  date      DateTime @default(now()) // the date this ticket relates to
+  flowId    String
+  flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Design {
+  id         String   @id @default(cuid())
+  title      String
+  claudeUrl  String   @default("") // the Claude design link (optional — a design can also live as attached files/HTML only)
+  variant    String   @default("") // optional label, e.g. "v2", "dark mode", "mobile"
+  order      Int      @default(0)
+  flowId     String
+  flow       Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  attachments DesignAttachment[]
+}
+
+// A file attached to a design — either a generic file (image, PDF, zip…) or a
+// standalone HTML export, which can be opened directly and rendered by the
+// browser since it's a fully self-contained page. Stored in Supabase Storage;
+// this row only holds the metadata + public URL.
+model DesignAttachment {
+  id        String   @id @default(cuid())
+  name      String // original filename
+  url       String // public Supabase Storage URL
+  path      String // storage object path, used to delete the file on cleanup
+  mimeType  String
+  size      Int // bytes
+  kind      String   @default("file") // "file" | "html"
+  designId  String
+  design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model Ticket {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @default("")
+  status      String   @default("todo") // todo | in_progress | review | done
+  priority    String   @default("medium") // low | medium | high | urgent
+  linearUrl   String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  assigneeId String?
+  assignee   User?   @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  // Optional link to where in the hierarchy this ticket lives.
+  solutionId String?
+  solution   Solution? @relation(fields: [solutionId], references: [id], onDelete: SetNull)
+  flowId     String?
+  flow       Flow?     @relation(fields: [flowId], references: [id], onDelete: SetNull)
+
+  comments Comment[]
+}
+
+// A comment thread on a ticket — discussion / notes from designers.
+model Comment {
+  id        String   @id @default(cuid())
+  body      String
+  ticketId  String
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?    @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+}

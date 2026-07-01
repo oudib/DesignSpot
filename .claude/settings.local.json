@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npx prisma *)",
+      "Bash(grep -vE \"^$|Datasource|Prisma schema loaded\")",
+      "Bash(node -e ' *)",
+      "Bash(npx tsc *)",
+      "Bash(npm run *)",
+      "Bash(git --version)",
+      "Bash(git ls-remote *)"
+    ]
+  }
+}
