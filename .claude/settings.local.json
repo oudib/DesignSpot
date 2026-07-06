@@ -8,7 +8,9 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(git --version)",
-      "Bash(git ls-remote *)"
+      "Bash(git ls-remote *)",
+      "Bash(npm audit *)",
+      "Bash(npm ls *)"
     ]
   }
 }

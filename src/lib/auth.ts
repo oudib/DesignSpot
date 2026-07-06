@@ -2,6 +2,9 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 
 const COOKIE_NAME = "sobrus_ds_session";
+
+// Only company accounts may sign in (Google login and password login).
+export const ALLOWED_EMAIL_DOMAIN = "sobrus.com";
 const secret = new TextEncoder().encode(
   process.env.AUTH_SECRET ?? "insecure-dev-secret-change-me"
 );

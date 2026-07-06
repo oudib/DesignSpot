@@ -3,7 +3,7 @@
 import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { createSession } from "@/lib/auth";
+import { createSession, ALLOWED_EMAIL_DOMAIN } from "@/lib/auth";
 
 export type LoginState = { error?: string };
 
@@ -13,10 +13,14 @@ export async function login(
 ): Promise<LoginState> {
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
-  const from = String(formData.get("from") ?? "/manage");
+  const from = String(formData.get("from") ?? "/");
 
   if (!email || !password) {
     return { error: "Email and password are required." };
+  }
+
+  if (!email.endsWith(`@${ALLOWED_EMAIL_DOMAIN}`)) {
+    return { error: `Only @${ALLOWED_EMAIL_DOMAIN} emails can sign in.` };
   }
 
   const user = await prisma.user.findUnique({ where: { email } });
@@ -31,5 +35,5 @@ export async function login(
     role: user.role,
   });
 
-  redirect(from.startsWith("/") ? from : "/manage");
+  redirect(from.startsWith("/") ? from : "/");
 }
