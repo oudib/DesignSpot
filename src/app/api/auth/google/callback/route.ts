@@ -3,6 +3,7 @@ import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { createSession, ALLOWED_EMAIL_DOMAIN } from "@/lib/auth";
+import { isAdminEmail } from "@/lib/access";
 import { OAUTH_STATE_COOKIE, googleRedirectUri } from "@/lib/googleAuth";
 
 type GoogleIdToken = {
@@ -80,7 +81,15 @@ export async function GET(req: NextRequest) {
         name: claims.name || email.split("@")[0],
         // Google-only account: unguessable placeholder so password login stays unusable.
         password: await bcrypt.hash(randomBytes(32).toString("hex"), 10),
+        // New sign-ins can only browse — workspace access is granted by an
+        // admin in /manage/users. ADMIN_EMAILS accounts skip straight to admin.
+        role: isAdminEmail(email) ? "admin" : "viewer",
       },
+    });
+  } else if (isAdminEmail(email) && user.role !== "admin") {
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: { role: "admin" },
     });
   }
 

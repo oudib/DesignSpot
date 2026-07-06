@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getSession, destroySession } from "@/lib/auth";
+import { getSession, destroySession, hasWorkspaceAccess } from "@/lib/auth";
 import { slugify } from "@/lib/utils";
 import {
   postLinearComment,
@@ -78,6 +78,13 @@ async function syncTicketChanges(
 async function requireAuth() {
   const session = await getSession();
   if (!session) redirect("/login?from=/manage");
+  // Role comes from the DB, not the JWT, so revoking workspace access in
+  // /manage/users locks mutations out immediately.
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { role: true },
+  });
+  if (!hasWorkspaceAccess(user?.role)) redirect("/");
   return session;
 }
 

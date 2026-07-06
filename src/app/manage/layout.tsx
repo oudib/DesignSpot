@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getSession, hasWorkspaceAccess } from "@/lib/auth";
+import { currentRole } from "@/lib/access";
 import { logout } from "./actions";
 import ManageNav from "@/components/ManageNav";
 
@@ -9,6 +11,8 @@ export default async function ManageLayout({
   children: React.ReactNode;
 }) {
   const session = await getSession();
+  const role = await currentRole();
+  if (!hasWorkspaceAccess(role)) redirect("/");
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -45,11 +49,11 @@ export default async function ManageLayout({
 
       <div className="mx-auto flex max-w-7xl gap-6 px-4 py-8 sm:px-6">
         <aside className="hidden w-52 shrink-0 lg:block">
-          <ManageNav />
+          <ManageNav isAdmin={role === "admin"} />
         </aside>
         <main className="min-w-0 flex-1">
           <div className="mb-6 lg:hidden">
-            <ManageNav />
+            <ManageNav isAdmin={role === "admin"} />
           </div>
           {children}
         </main>

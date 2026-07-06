@@ -1,9 +1,12 @@
 import Link from "next/link";
-import { getSession } from "@/lib/auth";
+import { getSession, hasWorkspaceAccess } from "@/lib/auth";
+import { currentRole } from "@/lib/access";
+import { logout } from "@/app/manage/actions";
 import LinearFinder from "./LinearFinder";
 
 export default async function SiteHeader() {
   const session = await getSession();
+  const role = session ? await currentRole() : null;
 
   return (
     <header className="surface-blur sticky top-0 z-30">
@@ -25,10 +28,19 @@ export default async function SiteHeader() {
             Solutions
           </Link>
           <LinearFinder />
-          {session ? (
+          {session && hasWorkspaceAccess(role) ? (
             <Link href="/manage" className="btn-primary btn-sm sm:px-4 sm:py-2.5">
               Designer workspace
             </Link>
+          ) : session ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden text-sm text-slate-500 sm:block">
+                {session.name}
+              </span>
+              <form action={logout}>
+                <button className="btn-secondary btn-sm">Sign out</button>
+              </form>
+            </div>
           ) : (
             <Link href="/login" className="btn-secondary btn-sm sm:px-4 sm:py-2.5">
               Sign in

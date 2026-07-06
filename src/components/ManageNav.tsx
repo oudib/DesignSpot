@@ -11,12 +11,17 @@ const ITEMS = [
   { href: "/manage/settings", label: "Settings" },
 ];
 
-export default function ManageNav() {
+const ADMIN_ITEMS = [
+  { href: "/manage/users", label: "Users & access", exact: false },
+];
+
+export default function ManageNav({ isAdmin = false }: { isAdmin?: boolean }) {
   const pathname = usePathname();
+  const items = isAdmin ? [...ITEMS, ...ADMIN_ITEMS] : ITEMS;
 
   return (
     <nav className="flex gap-1.5 lg:flex-col">
-      {ITEMS.map((item) => {
+      {items.map((item) => {
         const active = item.exact
           ? pathname === item.href
           : pathname.startsWith(item.href);
