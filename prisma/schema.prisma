@@ -113,6 +113,11 @@ model Design {
   order      Int      @default(0)
   flowId     String
   flow       Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  // Set when this design was delivered from a ticket (the "Mark as done" /
+  // "Add delivery" flows) — lets the ticket detail page show only its own
+  // deliverables instead of every design under the flow.
+  ticketId   String?
+  ticket     Ticket?  @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -156,6 +161,7 @@ model Ticket {
   flow       Flow?     @relation(fields: [flowId], references: [id], onDelete: SetNull)
 
   comments Comment[]
+  designs  Design[]
 }
 
 // A comment thread on a ticket — discussion / notes from designers.

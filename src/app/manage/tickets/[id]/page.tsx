@@ -14,6 +14,7 @@ import {
   priorityMeta,
 } from "@/lib/utils";
 import GeneratePromptButton from "@/components/GeneratePromptButton";
+import { MarkDoneButton, DeliverablesCard } from "@/components/TicketDelivery";
 
 export const dynamic = "force-dynamic";
 
@@ -54,6 +55,10 @@ export default async function TicketDetailPage({
           orderBy: { createdAt: "asc" },
           include: { author: true },
         },
+        designs: {
+          orderBy: { createdAt: "asc" },
+          include: { attachments: { orderBy: { createdAt: "asc" } } },
+        },
       },
     }),
     prisma.user.findMany({ orderBy: { name: "asc" } }),
@@ -63,6 +68,13 @@ export default async function TicketDetailPage({
 
   const sm = statusMeta(ticket.status);
   const pm = priorityMeta(ticket.priority);
+  const ticketLite = {
+    id: ticket.id,
+    title: ticket.title,
+    status: ticket.status,
+    flowId: ticket.flowId,
+    flowName: ticket.flow?.name ?? null,
+  };
 
   return (
     <div>
@@ -87,6 +99,7 @@ export default async function TicketDetailPage({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          <MarkDoneButton ticket={ticketLite} />
           <GeneratePromptButton ticketId={ticket.id} />
           {ticket.linearUrl && (
             <a
@@ -190,6 +203,8 @@ export default async function TicketDetailPage({
               </div>
             </form>
           </div>
+
+          <DeliverablesCard ticket={ticketLite} designs={ticket.designs} />
 
           {/* Comments */}
           <div className="card p-5">

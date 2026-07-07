@@ -344,9 +344,12 @@ export async function createDesign(fd: FormData) {
   const flowId = s(fd, "flowId");
   if (!title || !flowId) return;
   const variant = s(fd, "variant");
+  // Set when delivered from a ticket (board drag-to-done or the ticket detail
+  // page) — lets that ticket show only its own deliverables.
+  const ticketId = s(fd, "ticketId") || null;
   const count = await prisma.design.count({ where: { flowId } });
   const design = await prisma.design.create({
-    data: { title, claudeUrl: linkUrl, variant, flowId, order: count },
+    data: { title, claudeUrl: linkUrl, variant, flowId, ticketId, order: count },
   });
 
   // Optional delivery file (image, PDF, zip, HTML export…). Uploaded to
@@ -532,6 +535,7 @@ export async function setTicketStatus(fd: FormData) {
   }
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
+  revalidatePath(`/manage/tickets/${id}`);
 }
 
 export async function deleteTicket(fd: FormData) {
