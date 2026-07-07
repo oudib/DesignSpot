@@ -108,7 +108,7 @@ model LinearTicket {
 model Design {
   id         String   @id @default(cuid())
   title      String
-  claudeUrl  String   @default("") // the Claude design link (optional — a design can also live as attached files/HTML only)
+  claudeUrl  String   @default("") // external design link — Claude share link or Google Drive link (optional — a design can also live as attached files/HTML only)
   variant    String   @default("") // optional label, e.g. "v2", "dark mode", "mobile"
   order      Int      @default(0)
   flowId     String
@@ -121,13 +121,13 @@ model Design {
 
 // A file attached to a design — either a generic file (image, PDF, zip…) or a
 // standalone HTML export, which can be opened directly and rendered by the
-// browser since it's a fully self-contained page. Stored in Supabase Storage;
-// this row only holds the metadata + public URL.
+// browser since it's a fully self-contained page. Stored in Google Drive;
+// this row only holds the metadata + the app download URL (/api/files/[id]).
 model DesignAttachment {
   id        String   @id @default(cuid())
   name      String // original filename
-  url       String // public Supabase Storage URL
-  path      String // storage object path, used to delete the file on cleanup
+  url       String // app download URL streaming the file from Google Drive
+  path      String // Google Drive file id, used to stream + delete the file
   mimeType  String
   size      Int // bytes
   kind      String   @default("file") // "file" | "html"

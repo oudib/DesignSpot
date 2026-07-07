@@ -195,9 +195,10 @@ export default function TicketsClient({
   );
 }
 
-// Shown when a ticket is dragged into Done: capture the finished Claude design
-// link and attach it to the ticket's flow. The status change has already been
-// saved, so skipping just dismisses the prompt.
+// Shown when a ticket is dragged into Done: capture the finished design —
+// either an uploaded file or a Google Drive link — and attach it to the
+// ticket's flow. The status change is held back until this succeeds (or is
+// explicitly skipped).
 function DesignLinkDialog({
   ticket,
   onAttached,
@@ -210,14 +211,21 @@ function DesignLinkDialog({
   onCancel: () => void;
 }) {
   const [pending, setPending] = useState(false);
+  const [method, setMethod] = useState<"file" | "drive">("file");
+  const [error, setError] = useState("");
 
   const handleSave = async (fd: FormData) => {
     setPending(true);
+    setError("");
     try {
       // Attach the design first; only then mark the ticket Done so the status
       // change (and its Linear comment) never fires unless this succeeds.
       await createDesign(fd);
       onAttached();
+    } catch {
+      setError(
+        "The delivery couldn't be saved — check the file or link and try again.",
+      );
     } finally {
       setPending(false);
     }
@@ -234,7 +242,7 @@ function DesignLinkDialog({
       >
         <div className="flex items-center gap-2">
           <span className="badge bg-emerald-100 text-emerald-700">Done</span>
-          <h2 className="text-lg font-bold">Add the Claude design link</h2>
+          <h2 className="text-lg font-bold">Deliver the design</h2>
         </div>
         <p className="mt-1 text-sm text-slate-500">
           Attach the final design to{" "}
@@ -258,15 +266,50 @@ function DesignLinkDialog({
           </div>
 
           <div>
-            <label className="label">Claude design link</label>
-            <input
-              name="claudeUrl"
-              type="url"
-              required
-              autoFocus
-              className="input"
-              placeholder="https://claude.ai/…"
-            />
+            <label className="label">Delivery</label>
+            <div className="mb-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setMethod("file")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                  method === "file"
+                    ? "border-brand-300 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                📎 Attachment
+              </button>
+              <button
+                type="button"
+                onClick={() => setMethod("drive")}
+                className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                  method === "drive"
+                    ? "border-brand-300 bg-brand-50 text-brand-700"
+                    : "border-slate-200 text-slate-500 hover:bg-slate-50"
+                }`}
+              >
+                🔗 Google Drive link
+              </button>
+            </div>
+            {method === "file" ? (
+              <input
+                key="file"
+                name="file"
+                type="file"
+                required
+                className="input text-sm text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-200"
+              />
+            ) : (
+              <input
+                key="drive"
+                name="linkUrl"
+                type="url"
+                required
+                autoFocus
+                className="input"
+                placeholder="https://drive.google.com/…"
+              />
+            )}
           </div>
 
           <div>
@@ -277,6 +320,12 @@ function DesignLinkDialog({
               placeholder="e.g. v2, dark mode, mobile"
             />
           </div>
+
+          {error && (
+            <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
+              {error}
+            </p>
+          )}
 
           <div className="flex items-center justify-between pt-2">
             <button
@@ -294,12 +343,12 @@ function DesignLinkDialog({
                 onClick={onSkip}
                 disabled={pending}
                 className="text-sm font-medium text-slate-500 hover:text-slate-800"
-                title="Mark it Done without a design link"
+                title="Mark it Done without a delivery"
               >
                 Skip
               </button>
               <button type="submit" disabled={pending} className="btn-primary">
-                {pending ? "Saving…" : "Add design link"}
+                {pending ? "Delivering…" : "Deliver design"}
               </button>
             </div>
           </div>

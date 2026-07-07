@@ -338,17 +338,47 @@ export async function deleteLinearTicket(fd: FormData) {
 export async function createDesign(fd: FormData) {
   const session = await requireAuth();
   const title = s(fd, "title");
-  const claudeUrl = s(fd, "claudeUrl");
+  // The design link can be a Claude share link or a Google Drive link — the
+  // delivery dialog sends it as "linkUrl", older forms still send "claudeUrl".
+  const linkUrl = s(fd, "linkUrl") || s(fd, "claudeUrl");
   const flowId = s(fd, "flowId");
   if (!title || !flowId) return;
   const variant = s(fd, "variant");
   const count = await prisma.design.count({ where: { flowId } });
-  await prisma.design.create({
-    data: { title, claudeUrl, variant, flowId, order: count },
+  const design = await prisma.design.create({
+    data: { title, claudeUrl: linkUrl, variant, flowId, order: count },
   });
-  // Push the new design link to every Linear issue tied to this flow, as the
-  // acting designer. Only when there's actually a link to share.
-  if (claudeUrl) {
+
+  // Optional delivery file (image, PDF, zip, HTML export…). Uploaded to
+  // Google Drive and attached to the design just created. If the upload
+  // fails, the design row is rolled back so the delivery never half-succeeds.
+  const file = fd.get("file");
+  let attachmentUrl = "";
+  if (file instanceof File && file.size > 0) {
+    try {
+      const { path, url } = await uploadAttachment(design.id, file);
+      await prisma.designAttachment.create({
+        data: {
+          designId: design.id,
+          name: file.name,
+          url,
+          path,
+          mimeType: file.type || "application/octet-stream",
+          size: file.size,
+          kind: attachmentKind(file.name, file.type),
+        },
+      });
+      attachmentUrl = url;
+    } catch (err) {
+      await prisma.design.delete({ where: { id: design.id } }).catch(() => {});
+      throw err;
+    }
+  }
+
+  // Push the new design to every Linear issue tied to this flow, as the
+  // acting designer. Only when there's actually something to share.
+  const sharedUrl = linkUrl || attachmentUrl;
+  if (sharedUrl) {
     const key = await actingLinearKey(session.userId);
     if (key) {
       const tickets = await prisma.ticket.findMany({
@@ -357,7 +387,7 @@ export async function createDesign(fd: FormData) {
       });
       const label = variant ? `${title} (${variant})` : title;
       for (const t of tickets) {
-        await postLinearComment(key, t.linearUrl, `🎨 New design added: **${label}**\n${claudeUrl}`);
+        await postLinearComment(key, t.linearUrl, `🎨 New design added: **${label}**\n${sharedUrl}`);
       }
     }
   }
@@ -394,7 +424,7 @@ export async function deleteDesign(fd: FormData) {
 
 /* ------------------------- Design attachments ------------------------ */
 // Files (images, PDFs, zips…) and standalone HTML exports attached to a
-// design, stored in Supabase Storage — this only persists the metadata.
+// design, stored in Google Drive — this only persists the metadata.
 
 export async function addDesignAttachment(fd: FormData) {
   await requireAuth();
