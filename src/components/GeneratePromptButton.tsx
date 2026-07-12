@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { generateDesignPrompt } from "@/app/manage/actions";
+import Spinner from "./Spinner";
 
 export default function GeneratePromptButton({ ticketId }: { ticketId: string }) {
   const [loading, setLoading] = useState(false);
@@ -49,7 +50,11 @@ export default function GeneratePromptButton({ ticketId }: { ticketId: string })
         className="btn-secondary shrink-0"
         title="Generate a Claude design prompt from this ticket"
       >
-        <span className="text-brand-600">✦</span>{" "}
+        {loading ? (
+          <Spinner className="text-brand-600" />
+        ) : (
+          <span className="text-brand-600">✦</span>
+        )}{" "}
         {loading ? "Generating…" : "Generate a prompt"}
       </button>
 

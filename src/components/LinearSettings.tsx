@@ -6,6 +6,7 @@ import {
   disconnectLinear,
   type ConnectResult,
 } from "@/app/manage/actions";
+import Spinner from "@/components/Spinner";
 
 export default function LinearSettings({
   connected,
@@ -111,6 +112,7 @@ function ConnectForm({
       )}
 
       <button type="submit" disabled={pending} className="btn-primary btn-sm">
+        {pending && <Spinner />}
         {pending ? "Connecting…" : "Connect Linear"}
       </button>
     </form>

@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { login, type LoginState } from "./actions";
+import Spinner from "@/components/Spinner";
 
 const OAUTH_ERRORS: Record<string, string> = {
   domain: "Only @sobrus.com Google accounts can sign in.",
@@ -120,6 +121,7 @@ function LoginForm() {
           )}
 
           <button type="submit" disabled={pending} className="btn-primary w-full">
+            {pending && <Spinner />}
             {pending ? "Signing in…" : "Sign in"}
           </button>
         </form>

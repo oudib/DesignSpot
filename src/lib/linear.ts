@@ -19,14 +19,13 @@ export function flowUrl(flowId: string): string {
   return base ? `${base}/flows/${flowId}` : `/flows/${flowId}`;
 }
 
+// Only "done" gets a Linear comment — intermediate status changes (todo,
+// in_progress, review) stay silent so Linear isn't spammed on every drag.
 const STATUS_MESSAGES: Record<string, string> = {
-  todo: "📋 Design queued.",
-  in_progress: "🎨 Design is in progress.",
-  review: "👀 Design is in review.",
   done: "✅ Design completed.",
 };
 
-/** Human message for a ticket status, or null if the status is unknown. */
+/** Human message for a ticket status, or null if it shouldn't be announced. */
 export function statusMessage(status: string): string | null {
   return STATUS_MESSAGES[status] ?? null;
 }

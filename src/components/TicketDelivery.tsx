@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { setTicketStatus, deleteDesign, deleteDesignAttachment } from "@/app/manage/actions";
 import DeliveryDialog from "@/components/DeliveryDialog";
+import Spinner from "@/components/Spinner";
 
 type TicketLite = {
   id: string;
@@ -70,7 +71,7 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
         disabled={pending}
         className="btn-secondary shrink-0"
       >
-        <span className="text-emerald-600">✓</span>{" "}
+        {pending ? <Spinner className="text-emerald-600" /> : <span className="text-emerald-600">✓</span>}{" "}
         {pending ? "Marking…" : "Mark as done"}
       </button>
     );
@@ -89,8 +90,9 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
         <DeliveryDialog
           ticket={ticket}
           mode="complete"
-          onSaved={async () => {
-            await markDone(ticket.id);
+          onSaved={() => {
+            // createDesign already marked the ticket done (mode="complete"
+            // always sets markDone) and posted the combined Linear comment.
             setOpen(false);
             router.refresh();
           }}

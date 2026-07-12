@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import { createDesign } from "@/app/manage/actions";
+import Spinner from "./Spinner";
 
 type DeliveryTicket = {
   id: string;
   title: string;
+  status: string;
   flowId: string | null;
   flowName: string | null;
 };
@@ -33,11 +35,21 @@ export default function DeliveryDialog({
   const [pending, setPending] = useState(false);
   const [method, setMethod] = useState<"file" | "drive">("file");
   const [error, setError] = useState("");
+  const [markDone, setMarkDone] = useState(false);
+
+  // Only the "attach" flow (ticket detail page) shows the checkbox —
+  // "complete" mode always marks the ticket done regardless.
+  const showMarkDone = mode === "attach" && ticket.status !== "done";
 
   const handleSave = async (fd: FormData) => {
     setPending(true);
     setError("");
     try {
+      // createDesign folds the "done" comment into the same Linear comment
+      // as the delivery when markDone is set, instead of posting two.
+      if (mode === "complete" || (showMarkDone && markDone)) {
+        fd.set("markDone", "1");
+      }
       await createDesign(fd);
       onSaved();
     } catch {
@@ -154,6 +166,18 @@ export default function DeliveryDialog({
             />
           </div>
 
+          {showMarkDone && (
+            <label className="flex items-center gap-2 text-sm text-slate-600">
+              <input
+                type="checkbox"
+                checked={markDone}
+                onChange={(e) => setMarkDone(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300"
+              />
+              Mark “{ticket.title}” as done
+            </label>
+          )}
+
           {error && (
             <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
               {error}
@@ -187,6 +211,7 @@ export default function DeliveryDialog({
                 </button>
               )}
               <button type="submit" disabled={pending} className="btn-primary">
+                {pending && <Spinner />}
                 {pending ? "Delivering…" : "Deliver design"}
               </button>
             </div>

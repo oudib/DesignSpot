@@ -347,6 +347,10 @@ export async function createDesign(fd: FormData) {
   // Set when delivered from a ticket (board drag-to-done or the ticket detail
   // page) — lets that ticket show only its own deliverables.
   const ticketId = s(fd, "ticketId") || null;
+  // Set by the delivery dialog when this delivery should also mark the
+  // originating ticket done — folded into the same Linear comment below
+  // instead of firing a separate "done" comment right after this one.
+  const markDone = s(fd, "markDone") === "1" && !!ticketId;
   const count = await prisma.design.count({ where: { flowId } });
   const design = await prisma.design.create({
     data: { title, claudeUrl: linkUrl, variant, flowId, ticketId, order: count },
@@ -378,19 +382,29 @@ export async function createDesign(fd: FormData) {
     }
   }
 
+  // Mark the originating ticket done before announcing, so the completion
+  // line can be folded into the same delivery comment below rather than
+  // posting a second, separate comment.
+  if (markDone) {
+    await prisma.ticket.update({ where: { id: ticketId! }, data: { status: "done" } });
+  }
+
   // Push the new design to every Linear issue tied to this flow, as the
-  // acting designer. Only when there's actually something to share.
+  // acting designer. Only when there's actually something to announce.
   const sharedUrl = linkUrl || attachmentUrl;
-  if (sharedUrl) {
+  if (sharedUrl || markDone) {
     const key = await actingLinearKey(session.userId);
     if (key) {
       const tickets = await prisma.ticket.findMany({
         where: { flowId, NOT: { linearUrl: "" } },
-        select: { linearUrl: true },
+        select: { id: true, linearUrl: true },
       });
       const label = variant ? `${title} (${variant})` : title;
       for (const t of tickets) {
-        await postLinearComment(key, t.linearUrl, `🎨 New design added: **${label}**\n${sharedUrl}`);
+        const lines: string[] = [];
+        if (sharedUrl) lines.push(`🎨 New design added: **${label}**\n${sharedUrl}`);
+        if (markDone && t.id === ticketId) lines.push("✅ Design completed.");
+        if (lines.length) await postLinearComment(key, t.linearUrl, lines.join("\n"));
       }
     }
   }

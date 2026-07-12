@@ -11,6 +11,7 @@ import {
 import { TICKET_STATUSES, TICKET_PRIORITIES, priorityMeta } from "@/lib/utils";
 import HierarchyPicker, { type SolLite } from "@/components/HierarchyPicker";
 import DeliveryDialog from "@/components/DeliveryDialog";
+import Spinner from "@/components/Spinner";
 
 type Ticket = {
   id: string;
@@ -53,18 +54,25 @@ export default function TicketsClient({
   // the design link is added (or explicitly skipped) so we never fire a Linear
   // comment we'd have to revert.
   const [designPrompt, setDesignPrompt] = useState<Ticket | null>(null);
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
 
   function setStatus(id: string, status: string) {
-    setBoard((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, status } : t)),
-    );
+    setStatusLocal(id, status);
     const fd = new FormData();
     fd.set("id", id);
     fd.set("status", status);
     startTransition(() => {
       setTicketStatus(fd);
     });
+  }
+
+  // Optimistic-only update, no server call — used after createDesign already
+  // persisted the status server-side (and posted the combined Linear
+  // comment) so we don't fire a second status update/comment.
+  function setStatusLocal(id: string, status: string) {
+    setBoard((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, status } : t)),
+    );
   }
 
   function moveTicket(id: string, status: string) {
@@ -86,7 +94,10 @@ export default function TicketsClient({
     <div>
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Tickets</h1>
+          <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
+            Tickets
+            {isPending && <Spinner className="text-slate-400" />}
+          </h1>
           <p className="mt-1 text-slate-500">
             Drag a card between columns to change its status.
           </p>
@@ -182,7 +193,9 @@ export default function TicketsClient({
           ticket={designPrompt}
           mode="complete"
           onSaved={() => {
-            setStatus(designPrompt.id, "done");
+            // createDesign already marked the ticket done and posted the
+            // combined Linear comment — just reflect it optimistically.
+            setStatusLocal(designPrompt.id, "done");
             setDesignPrompt(null);
           }}
           onSkip={() => {

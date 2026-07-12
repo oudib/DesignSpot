@@ -7,6 +7,7 @@ import {
   quickCreateSubmodule,
   quickCreateFlow,
 } from "@/app/manage/actions";
+import Spinner from "./Spinner";
 
 export type FlowLite = { id: string; name: string };
 export type SubLite = { id: string; name: string; flows: FlowLite[] };
@@ -238,7 +239,7 @@ function Level({
             disabled={busy || !draft.trim()}
             className="btn-primary btn-sm shrink-0"
           >
-            {busy ? "…" : "Add"}
+            {busy ? <Spinner /> : "Add"}
           </button>
           <button
             type="button"

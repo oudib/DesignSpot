@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { findByLinear } from "@/app/actions/lookup";
+import Spinner from "./Spinner";
 
 export default function LinearFinder() {
   const router = useRouter();
@@ -136,6 +137,7 @@ export default function LinearFinder() {
                   disabled={pending || !url.trim()}
                   className="btn-primary"
                 >
+                  {pending && <Spinner />}
                   {pending ? "Looking up…" : "Go to flow"}
                 </button>
               </div>
