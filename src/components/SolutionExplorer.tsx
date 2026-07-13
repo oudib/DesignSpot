@@ -280,7 +280,7 @@ function ViewToggle({
           className={cn(
             "flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold capitalize transition",
             view === v
-              ? "bg-brand-600 text-white shadow-sm"
+              ? "bg-slate-900 text-white shadow-sm"
               : "text-slate-500 hover:bg-slate-100"
           )}
         >

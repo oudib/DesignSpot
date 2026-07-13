@@ -2,8 +2,9 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import SolutionExplorer from "@/components/SolutionExplorer";
+import DarkHero from "@/components/DarkHero";
 import { prisma } from "@/lib/db";
-import { tint, languageMeta } from "@/lib/utils";
+import { languageMeta } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -54,37 +55,42 @@ export default async function SolutionPage({
     })),
   }));
 
+  const totalFlows = solution.modules.reduce(
+    (a, m) => a + m.submodules.reduce((b, s) => b + s.flows.length, 0),
+    0
+  );
+  const totalDesigns = solution.modules.reduce(
+    (a, m) =>
+      a +
+      m.submodules.reduce(
+        (b, s) => b + s.flows.reduce((c, f) => c + f._count.designs, 0),
+        0
+      ),
+    0
+  );
+
   return (
     <div className="min-h-screen">
       <SiteHeader />
 
-      <section
-        className="border-b border-slate-200/70"
-        style={{ backgroundColor: tint(solution.color, 0.06) }}
+      <DarkHero
+        accent={solution.color}
+        className="rounded-b-[2rem] sm:rounded-b-[2.75rem]"
       >
-        <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 pb-12 pt-8 sm:px-6">
           <Link
             href="/"
-            className="text-sm font-medium text-slate-500 transition hover:text-slate-800"
+            className="text-sm font-medium text-slate-400 transition hover:text-white"
           >
             ← All solutions
           </Link>
-          <div className="mt-4 flex items-start gap-4">
-            <div
-              className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm"
-              style={{
-                backgroundImage: `linear-gradient(135deg, ${tint(
-                  solution.color,
-                  0.18
-                )}, ${tint(solution.color, 0.08)})`,
-                color: solution.color,
-              }}
-            >
+          <div className="mt-5 flex items-start gap-4">
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl ring-1 ring-inset ring-white/15 backdrop-blur">
               {solution.icon}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-3xl font-extrabold tracking-tight">
+                <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
                   {solution.name}
                 </h1>
                 <span
@@ -94,19 +100,21 @@ export default async function SolutionPage({
                   {languageMeta(solution.language).label}
                 </span>
               </div>
-              <p
-                className="text-sm font-semibold"
-                style={{ color: solution.color }}
-              >
+              <p className="mt-1 text-sm font-semibold text-slate-300">
                 {solution.tagline}
               </p>
-              <p className="mt-2 max-w-2xl text-slate-600">
+              <p className="mt-2 max-w-2xl text-slate-400">
                 {solution.description}
               </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <HeroChip value={solution.modules.length} label="modules" />
+                <HeroChip value={totalFlows} label="flows" />
+                <HeroChip value={totalDesigns} label="designs" />
+              </div>
             </div>
           </div>
         </div>
-      </section>
+      </DarkHero>
 
       <main className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
         <SolutionExplorer
@@ -119,5 +127,13 @@ export default async function SolutionPage({
         />
       </main>
     </div>
+  );
+}
+
+function HeroChip({ value, label }: { value: number; label: string }) {
+  return (
+    <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-slate-300 ring-1 ring-inset ring-white/10 backdrop-blur">
+      <strong className="font-bold text-white">{value}</strong> {label}
+    </span>
   );
 }

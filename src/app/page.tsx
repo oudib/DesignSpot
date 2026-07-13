@@ -1,6 +1,5 @@
-import SiteHeader from "@/components/SiteHeader";
+import HomeHero from "@/components/HomeHero";
 import SolutionCard from "@/components/SolutionCard";
-import HomeSearch from "@/components/HomeSearch";
 import { prisma } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -38,17 +37,14 @@ export default async function HomePage() {
 
   return (
     <div className="min-h-screen">
-      <SiteHeader />
+      <HomeHero
+        solutions={solutions.map((s) => ({ name: s.name, slug: s.slug }))}
+      />
 
-      <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pt-14">
-        {/* Onboarding-style intro — compact, straight to the point */}
-        <div className="animate-rise relative z-30 max-w-2xl">
-          <HomeSearch />
-        </div>
-
-        {/* Solutions grid */}
+      {/* Cards float up over the navy hero, Payfin-style */}
+      <main className="mx-auto max-w-6xl px-4 pb-20 sm:px-6">
         {cards.length === 0 ? (
-          <div className="card mt-10 p-10 text-center text-slate-500">
+          <div className="card -mt-16 p-10 text-center text-slate-500 sm:-mt-20">
             No solutions yet. Run{" "}
             <code className="rounded bg-slate-100 px-1.5 py-0.5">
               npm run db:seed
@@ -56,7 +52,7 @@ export default async function HomePage() {
             .
           </div>
         ) : (
-          <div className="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="-mt-16 grid gap-5 sm:-mt-20 sm:grid-cols-2 lg:grid-cols-3">
             {cards.map(({ solution, stats }, i) => (
               <SolutionCard
                 key={solution.id}

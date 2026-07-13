@@ -6,7 +6,12 @@ import { useRouter } from "next/navigation";
 import { findByLinear } from "@/app/actions/lookup";
 import Spinner from "./Spinner";
 
-export default function LinearFinder() {
+type Props = {
+  /** "dark" renders the translucent trigger used on the navy home hero. */
+  variant?: "light" | "dark";
+};
+
+export default function LinearFinder({ variant = "light" }: Props) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
@@ -59,9 +64,13 @@ export default function LinearFinder() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="btn-secondary btn-sm sm:px-3.5 sm:py-2.5"
+        className={
+          variant === "dark"
+            ? "inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20 active:scale-[0.98] sm:px-3.5 sm:py-2.5 sm:text-sm"
+            : "btn-secondary btn-sm sm:px-3.5 sm:py-2.5"
+        }
       >
-        <span className="text-violet-600">◆</span>
+        <span className={variant === "dark" ? "text-violet-300" : "text-violet-600"}>◆</span>
         <span className="hidden sm:inline">Find by Linear</span>
         <span className="sm:hidden">Linear</span>
       </button>

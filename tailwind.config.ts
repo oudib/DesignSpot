@@ -8,6 +8,9 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // Deep violet-navy used by the dark hero headers — tuned to sit
+        // between the logo gradient (#4C0D6C → #B919D2) and near-black.
+        midnight: "#0e0824",
         brand: {
           50: "#eef4ff",
           100: "#d9e6ff",

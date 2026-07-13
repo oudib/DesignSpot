@@ -16,7 +16,13 @@ const TYPE_META: Record<
   ticket: { glyph: "◆", label: "Ticket", chip: "bg-amber-100 text-amber-700" },
 };
 
-export default function HomeSearch() {
+type Props = {
+  /** "dark" renders the translucent input used on the navy home hero. */
+  variant?: "light" | "dark";
+  className?: string;
+};
+
+export default function HomeSearch({ variant = "light", className }: Props) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -83,7 +89,7 @@ export default function HomeSearch() {
   const showPanel = open && query.trim().length >= 2;
 
   return (
-    <div ref={boxRef} className="relative max-w-xl">
+    <div ref={boxRef} className={cn("relative", className ?? "max-w-xl")}>
       <div className="relative">
         <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
           <SearchIcon />
@@ -94,7 +100,12 @@ export default function HomeSearch() {
           onFocus={() => results.length > 0 && setOpen(true)}
           onKeyDown={onKeyDown}
           placeholder="Search by name or ticket ID…"
-          className="input pl-10 pr-10"
+          className={cn(
+            variant === "dark"
+              ? "w-full rounded-xl border border-white/10 bg-white/10 py-2.5 pl-10 pr-10 text-sm text-white outline-none backdrop-blur transition placeholder:text-slate-400 focus:border-white/25 focus:bg-white/15 focus:ring-4 focus:ring-white/10"
+              : "input",
+            "pl-10 pr-10"
+          )}
           aria-label="Search solutions, flows and tickets"
         />
         {loading && (
@@ -105,7 +116,7 @@ export default function HomeSearch() {
       </div>
 
       {showPanel && (
-        <div className="card absolute z-40 mt-2 w-full overflow-hidden p-1.5">
+        <div className="card absolute z-40 mt-2 w-full overflow-hidden p-1.5 shadow-card-hover">
           {results.length === 0 ? (
             <p className="px-3 py-4 text-center text-sm text-slate-400">
               {loading ? "Searching…" : "No matches found."}

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
+import DarkHero from "@/components/DarkHero";
 import { prisma } from "@/lib/db";
 import { tint, statusMeta, priorityMeta } from "@/lib/utils";
 import { currentActor } from "@/lib/access";
@@ -75,55 +76,43 @@ export default async function FlowPage({
     <div className="min-h-screen">
       <SiteHeader />
 
-      {/* Header band — same language as the solution page */}
-      <section
-        className="border-b border-slate-200/70"
-        style={{ backgroundColor: tint(color, 0.06) }}
+      {/* Header band — same dark hero language as the home and solution pages */}
+      <DarkHero
+        accent={color}
+        className="rounded-b-[2rem] sm:rounded-b-[2.75rem]"
       >
-        <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
-          <nav className="flex flex-wrap items-center gap-1.5 text-sm text-slate-500">
-            <Link href="/" className="hover:text-slate-800">
+        <div className="mx-auto max-w-6xl px-4 pb-12 pt-8 sm:px-6">
+          <nav className="flex flex-wrap items-center gap-1.5 text-sm text-slate-400">
+            <Link href="/" className="transition hover:text-white">
               Home
             </Link>
-            <span className="text-slate-300">/</span>
+            <span className="text-slate-600">/</span>
             <Link
               href={`/solutions/${solution.slug}`}
-              className="hover:text-slate-800"
+              className="transition hover:text-white"
             >
               {solution.name}
             </Link>
-            <span className="text-slate-300">/</span>
+            <span className="text-slate-600">/</span>
             <span>{module.name}</span>
-            <span className="text-slate-300">/</span>
+            <span className="text-slate-600">/</span>
             <span>{submodule.name}</span>
           </nav>
 
-          <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="mt-5 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="flex items-start gap-4">
-              <div
-                className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl text-3xl shadow-sm"
-                style={{
-                  backgroundImage: `linear-gradient(135deg, ${tint(
-                    color,
-                    0.18
-                  )}, ${tint(color, 0.08)})`,
-                  color,
-                }}
-              >
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-3xl ring-1 ring-inset ring-white/15 backdrop-blur">
                 {solution.icon}
               </div>
               <div>
-                <span
-                  className="badge mb-1"
-                  style={{ backgroundColor: tint(color, 0.14), color }}
-                >
+                <span className="badge mb-1.5 bg-white/10 text-slate-200 ring-1 ring-inset ring-white/10">
                   Flow
                 </span>
-                <h1 className="text-3xl font-extrabold tracking-tight">
+                <h1 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
                   {flow.name}
                 </h1>
                 {flow.description && (
-                  <p className="mt-1.5 max-w-2xl text-slate-600">
+                  <p className="mt-1.5 max-w-2xl text-slate-400">
                     {flow.description}
                   </p>
                 )}
@@ -137,15 +126,15 @@ export default async function FlowPage({
                   href={linked.linearUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-secondary shrink-0"
+                  className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
                 >
-                  <span className="text-violet-600">◆</span> Open in Linear
+                  <span className="text-violet-300">◆</span> Open in Linear
                 </a>
               ) : null;
             })()}
           </div>
         </div>
-      </section>
+      </DarkHero>
 
       {/* Main grid: content + details sidebar */}
       <main className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_320px]">

@@ -19,73 +19,105 @@ export default function SolutionCard({ solution, stats, index = 0 }: Props) {
   return (
     <Link
       href={`/solutions/${solution.slug}`}
-      className="animate-rise group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 p-6 shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:border-transparent hover:shadow-card-hover"
-      style={{
-        animationDelay: `${index * 60}ms`,
-        backgroundImage: `linear-gradient(150deg, ${tint(
-          solution.color,
-          0.16
-        )}, ${tint(solution.color, 0.05)} 55%, #ffffff 100%)`,
-      }}
+      className="animate-rise group relative flex flex-col overflow-hidden rounded-[1.6rem] border border-slate-200/60 bg-white p-6 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
+      style={{ animationDelay: `${index * 60}ms` }}
     >
       {/* glow that appears on hover, tinted by the solution color */}
       <span
-        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-0 blur-2xl transition-opacity duration-300 group-hover:opacity-60"
         style={{ backgroundColor: tint(solution.color, 0.5) }}
       />
 
-      <div className="relative flex items-start justify-between">
-        <div
-          className="flex h-14 w-14 items-center justify-center rounded-2xl text-2xl shadow-sm transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-3"
+      <div className="relative flex items-center gap-3.5">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl ring-1 ring-inset ring-slate-900/5 transition-transform duration-300 group-hover:scale-110"
           style={{
             backgroundImage: `linear-gradient(135deg, ${tint(
               solution.color,
-              0.32
-            )}, ${tint(solution.color, 0.14)})`,
+              0.22
+            )}, ${tint(solution.color, 0.08)})`,
             color: solution.color,
           }}
         >
           {solution.icon}
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[15px] font-bold tracking-tight text-slate-900">
+            {solution.name}
+          </h3>
+          <p className="truncate text-xs font-medium text-slate-400">
+            {solution.tagline}
+          </p>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`badge ${languageMeta(solution.language).color}`}>
-            {languageMeta(solution.language).short}
-          </span>
-          <span
-            className="flex h-8 w-8 items-center justify-center rounded-full text-slate-300 transition-all duration-300 group-hover:translate-x-0.5"
-            style={{ color: solution.color }}
-          >
-            →
-          </span>
-        </div>
+        <span
+          className={`badge shrink-0 ${languageMeta(solution.language).color}`}
+        >
+          {languageMeta(solution.language).short}
+        </span>
       </div>
 
-      <h3 className="relative mt-5 text-lg font-bold tracking-tight text-slate-900">
-        {solution.name}
-      </h3>
-      <p
-        className="relative mb-1 flex-1 text-sm font-semibold"
-        style={{ color: solution.color }}
-      >
-        {solution.tagline}
-      </p>
+      <div className="relative mt-6 flex items-baseline gap-1.5">
+        <span className="text-3xl font-extrabold tracking-tight text-slate-900">
+          {stats.designs}
+        </span>
+        <span className="text-sm font-medium text-slate-400">
+          design{stats.designs === 1 ? "" : "s"}
+        </span>
+      </div>
 
-      <div className="relative mt-5 flex items-center gap-2 border-t border-slate-200/70 pt-4">
-        <Stat value={stats.modules} label="modules" />
-        <Dot />
-        <Stat value={stats.flows} label="flows" />
-        <Dot />
-        <Stat value={stats.designs} label="designs" />
+      {/* Payfin-style segmented bar: modules / flows / designs proportions */}
+      <div className="relative mt-4 flex h-1.5 gap-1">
+        <span
+          className="rounded-full"
+          style={{
+            flexGrow: Math.max(stats.modules, 0.4),
+            backgroundColor: solution.color,
+          }}
+        />
+        <span
+          className="rounded-full"
+          style={{
+            flexGrow: Math.max(stats.flows, 0.4),
+            backgroundColor: tint(solution.color, 0.45),
+          }}
+        />
+        <span
+          className="rounded-full"
+          style={{
+            flexGrow: Math.max(stats.designs, 0.4),
+            backgroundColor: tint(solution.color, 0.16),
+          }}
+        />
+      </div>
+
+      <div className="relative mt-5 flex items-center justify-between border-t border-slate-100 pt-4">
+        <div className="flex items-center gap-2">
+          <Stat value={stats.modules} label="modules" />
+          <Dot />
+          <Stat value={stats.flows} label="flows" />
+        </div>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition-all duration-300 group-hover:bg-slate-900 group-hover:text-white">
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+            <path
+              d="M2.5 7h9M8 3.5L11.5 7 8 10.5"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
       </div>
     </Link>
   );
 }
 
 function Stat({ value, label }: { value: number; label: string }) {
+  const text = value === 1 && label.endsWith("s") ? label.slice(0, -1) : label;
   return (
     <span className="text-xs text-slate-500">
       <strong className="text-sm font-bold text-slate-800">{value}</strong>{" "}
-      {label}
+      {text}
     </span>
   );
 }

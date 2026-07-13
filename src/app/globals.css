@@ -14,15 +14,15 @@ body {
 
 body {
   @apply text-slate-900 antialiased;
-  background-color: #f7f8fb;
+  background-color: #f7f7fb;
   background-image: radial-gradient(
       60rem 60rem at 110% -10%,
-      rgba(52, 100, 246, 0.07),
+      rgba(185, 25, 210, 0.05),
       transparent 60%
     ),
     radial-gradient(
       50rem 50rem at -10% 0%,
-      rgba(168, 85, 247, 0.06),
+      rgba(124, 58, 237, 0.05),
       transparent 55%
     );
   background-attachment: fixed;
