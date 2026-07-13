@@ -3,6 +3,7 @@ import { getSession, hasWorkspaceAccess } from "@/lib/auth";
 import { currentRole } from "@/lib/access";
 import { logout } from "@/app/manage/actions";
 import LinearFinder from "./LinearFinder";
+import Logo from "@/components/Logo";
 
 export default async function SiteHeader() {
   const session = await getSession();
@@ -11,13 +12,8 @@ export default async function SiteHeader() {
   return (
     <header className="surface-blur sticky top-0 z-30">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
-        <Link href="/" className="group flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-sm shadow-brand-600/30 transition group-hover:scale-105">
-            DS
-          </span>
-          <span className="text-lg font-bold tracking-tight">
-            Sobrus<span className="text-brand-600"> DS</span>
-          </span>
+        <Link href="/" className="flex items-center transition hover:scale-105">
+          <Logo className="h-9 w-auto" />
         </Link>
 
         <nav className="flex items-center gap-1 sm:gap-2">

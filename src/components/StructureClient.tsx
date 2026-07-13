@@ -3,6 +3,7 @@
 import { useState } from "react";
 import * as A from "@/app/manage/actions";
 import { cn, SOLUTION_LANGUAGES, languageMeta } from "@/lib/utils";
+import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
 
 /* ----------------------------- Types ---------------------------- */
 type DesignAttachment = {
@@ -453,7 +454,7 @@ function DesignRow({ design }: { design: Design }) {
               className="flex items-center justify-between gap-2 text-xs"
             >
               <a
-                href={att.url}
+                href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex min-w-0 items-center gap-1.5 text-slate-600 hover:text-brand-600"

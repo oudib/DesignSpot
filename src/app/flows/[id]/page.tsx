@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import { prisma } from "@/lib/db";
 import { tint, statusMeta, priorityMeta } from "@/lib/utils";
+import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
 
 export const dynamic = "force-dynamic";
 
@@ -213,7 +214,7 @@ export default async function FlowPage({
                         {design.attachments.map((att) => (
                           <li key={att.id}>
                             <a
-                              href={att.url}
+                              href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="flex items-center gap-2 text-sm text-slate-600 hover:text-brand-600"

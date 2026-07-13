@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { setTicketStatus, deleteDesign, deleteDesignAttachment } from "@/app/manage/actions";
 import DeliveryDialog from "@/components/DeliveryDialog";
 import Spinner from "@/components/Spinner";
+import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
 
 type TicketLite = {
   id: string;
@@ -177,7 +178,7 @@ export function DeliverablesCard({
           {attachments.map((att) => (
             <li key={att.id} className="flex items-center justify-between gap-2 text-sm">
               <a
-                href={att.url}
+                href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex min-w-0 items-center gap-1.5 text-slate-600 hover:text-brand-600"

@@ -3,6 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
+import Logo from "@/components/Logo";
 
 const OAUTH_ERRORS: Record<string, string> = {
   domain: "Only @sobrus.com Google accounts can sign in.",
@@ -40,13 +41,8 @@ function LoginForm() {
 
   return (
     <div className="w-full max-w-sm">
-      <Link href="/" className="mb-8 flex items-center justify-center gap-2.5">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white">
-          DS
-        </span>
-        <span className="text-xl font-bold tracking-tight">
-          Sobrus<span className="text-brand-600"> DS</span>
-        </span>
+      <Link href="/" className="mb-8 flex items-center justify-center">
+        <Logo className="h-10 w-auto" />
       </Link>
 
       <div className="card p-8">

@@ -8,7 +8,7 @@ import { fetchAttachment } from "@/lib/storage";
 // way to reach them, and the middleware already requires a login for it —
 // the session check here is defense in depth.
 export async function GET(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
@@ -28,9 +28,12 @@ export async function GET(
 
   const upstream = await fetchAttachment(id);
 
+  // The preview page's "Download" button links here with ?download=1 to
+  // force a save-as instead of the default inline render.
+  const disposition = req.nextUrl.searchParams.has("download") ? "attachment" : "inline";
   const headers = new Headers({
     "Content-Type": attachment.mimeType || "application/octet-stream",
-    "Content-Disposition": `inline; filename="${encodeURIComponent(attachment.name)}"`,
+    "Content-Disposition": `${disposition}; filename="${encodeURIComponent(attachment.name)}"`,
     // Attachments never change once uploaded (a new upload gets a new id).
     "Cache-Control": "private, max-age=3600",
   });
