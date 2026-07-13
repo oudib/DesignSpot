@@ -29,13 +29,20 @@ export default async function AttachmentPreviewPage({
     <div className="flex h-screen flex-col">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-2.5">
         <Logo className="h-8 w-auto" />
-        <a
-          href={`/api/files/${id}?download=1`}
-          download={attachment.name}
-          className="btn-secondary shrink-0"
-        >
-          <span>⬇</span> Download {attachment.kind === "html" ? "HTML file" : "file"}
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          {attachment.kind === "html" && (
+            <a href={`/api/files/${id}/assets`} className="btn-secondary">
+              <span>🗂</span> Download Assets
+            </a>
+          )}
+          <a
+            href={`/api/files/${id}?download=1`}
+            download={attachment.name}
+            className="btn-secondary"
+          >
+            <span>⬇</span> Download {attachment.kind === "html" ? "HTML file" : "file"}
+          </a>
+        </div>
       </header>
       <iframe
         src={`/api/files/${id}`}
