@@ -1,11 +1,13 @@
 // Google Drive storage for design attachments (files + standalone HTML
 // exports). Files are uploaded by a service account into a shared Drive
-// folder and stay private — the app streams them back through
-// /api/files/[id], which is behind the login wall. Server-only: uses the
-// service-account private key, so it must never be imported into client
+// folder, shared with the company domain, and normally streamed back
+// through /api/files/[id] (behind the login wall) — the raw Drive link is
+// only a fallback for when the app itself is unreachable. Server-only: uses
+// the service-account private key, so it must never be imported into client
 // components.
 
 import { SignJWT, importPKCS8 } from "jose";
+import { ALLOWED_EMAIL_DOMAIN } from "@/lib/auth";
 
 const DRIVE_SCOPE = "https://www.googleapis.com/auth/drive";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -77,6 +79,34 @@ function downloadUrl(fileId: string): string {
   return `${base}/api/files/${fileId}`;
 }
 
+/** Drive's own view link — a fallback so a delivery is still reachable if the app itself is down. */
+function driveUrl(fileId: string): string {
+  return `https://drive.google.com/file/d/${fileId}/view`;
+}
+
+/**
+ * Share the file with anyone on the company domain, so the Drive fallback
+ * link actually opens for teammates instead of hitting a permission wall.
+ * Best-effort: a failure here shouldn't fail the upload itself.
+ */
+async function shareWithDomain(token: string, fileId: string) {
+  try {
+    await fetch(
+      `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(fileId)}/permissions?supportsAllDrives=true`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ type: "domain", domain: ALLOWED_EMAIL_DOMAIN, role: "reader" }),
+      }
+    );
+  } catch {
+    // Non-fatal — the app-served URL still works even if sharing failed.
+  }
+}
+
 /**
  * Upload a delivery file to the Drive folder. Uses a resumable upload
  * because deliveries regularly exceed the 5 MB cap of Drive's simple and
@@ -123,8 +153,9 @@ export async function uploadAttachment(designId: string, file: File) {
     throw new Error(`Drive upload failed (${upload.status}): ${await upload.text()}`);
   }
   const created = (await upload.json()) as { id: string };
+  await shareWithDomain(token, created.id);
 
-  return { path: created.id, url: downloadUrl(created.id) };
+  return { path: created.id, url: downloadUrl(created.id), driveUrl: driveUrl(created.id) };
 }
 
 /** Stream a stored file back from Drive. Returns the upstream response (body + content headers). */

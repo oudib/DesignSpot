@@ -361,9 +361,10 @@ export async function createDesign(fd: FormData) {
   // fails, the design row is rolled back so the delivery never half-succeeds.
   const file = fd.get("file");
   let attachmentUrl = "";
+  let attachmentDriveUrl = "";
   if (file instanceof File && file.size > 0) {
     try {
-      const { path, url } = await uploadAttachment(design.id, file);
+      const { path, url, driveUrl } = await uploadAttachment(design.id, file);
       await prisma.designAttachment.create({
         data: {
           designId: design.id,
@@ -376,6 +377,7 @@ export async function createDesign(fd: FormData) {
         },
       });
       attachmentUrl = url;
+      attachmentDriveUrl = driveUrl;
     } catch (err) {
       await prisma.design.delete({ where: { id: design.id } }).catch(() => {});
       throw err;
@@ -403,6 +405,8 @@ export async function createDesign(fd: FormData) {
       for (const t of tickets) {
         const lines: string[] = [];
         if (sharedUrl) lines.push(`🎨 New design added: **${label}**\n${sharedUrl}`);
+        // Fallback so the delivery is still reachable if the app itself is down.
+        if (attachmentDriveUrl) lines.push(`📁 Google Drive backup: ${attachmentDriveUrl}`);
         if (markDone && t.id === ticketId) lines.push("✅ Design completed.");
         if (lines.length) await postLinearComment(key, t.linearUrl, lines.join("\n"));
       }
