@@ -117,19 +117,19 @@ export default function TicketsClient({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
             Tickets
             {isPending && <Spinner className="text-slate-400" />}
           </h1>
-          <p className="mt-1 text-slate-500">
+          <p className="mt-1 max-w-xl text-slate-500">
             {view === "board"
               ? "Drag a card between columns to change its status. Done cards hide from the board after 7 days — find them in History."
               : "Every ticket, including ones no longer shown on the board."}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2">
           <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
             <button
               type="button"

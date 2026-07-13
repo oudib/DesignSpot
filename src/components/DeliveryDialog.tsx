@@ -166,6 +166,16 @@ export default function DeliveryDialog({
             />
           </div>
 
+          <div>
+            <label className="label">Claude design link (optional)</label>
+            <input
+              name="claudeUrl"
+              type="url"
+              className="input"
+              placeholder="https://claude.ai/… — in addition to the attachment above"
+            />
+          </div>
+
           {showMarkDone && (
             <label className="flex items-center gap-2 text-sm text-slate-600">
               <input

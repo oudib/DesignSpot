@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { updateDesign, deleteDesign } from "@/app/manage/actions";
 import { tint } from "@/lib/utils";
-import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
+import { attachmentPreviewUrl, attachmentDriveUrl } from "@/lib/attachmentUrl";
 
 type Attachment = {
   id: string;
@@ -199,23 +199,32 @@ function DesignCard({
       {design.attachments.length > 0 && (
         <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
           {design.attachments.map((att) => (
-            <li key={att.id}>
-              <a
-                href={
-                  att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url
-                }
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-2 text-sm text-slate-600 hover:text-brand-600"
-              >
+            <li
+              key={att.id}
+              className="flex items-center justify-between gap-2 text-sm text-slate-600"
+            >
+              <span className="flex min-w-0 items-center gap-2">
                 <span>{att.kind === "html" ? "◈" : "📎"}</span>
                 <span className="truncate">{att.name}</span>
-                {att.kind === "html" && (
-                  <span className="badge shrink-0 bg-brand-50 text-brand-700">
-                    Preview standalone HTML
-                  </span>
-                )}
-              </a>
+              </span>
+              <span className="flex shrink-0 items-center gap-1.5">
+                <a
+                  href={attachmentPreviewUrl(att.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="badge bg-brand-50 text-brand-700 hover:bg-brand-100"
+                >
+                  Preview
+                </a>
+                <a
+                  href={attachmentDriveUrl(att.url)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="badge bg-slate-100 text-slate-600 hover:bg-slate-200"
+                >
+                  Google Drive
+                </a>
+              </span>
             </li>
           ))}
         </ul>

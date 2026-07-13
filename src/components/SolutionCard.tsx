@@ -19,8 +19,14 @@ export default function SolutionCard({ solution, stats, index = 0 }: Props) {
   return (
     <Link
       href={`/solutions/${solution.slug}`}
-      className="animate-rise group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white p-6 shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:border-transparent hover:shadow-card-hover"
-      style={{ animationDelay: `${index * 60}ms` }}
+      className="animate-rise group relative flex flex-col overflow-hidden rounded-3xl border border-slate-200/80 p-6 shadow-card transition-all duration-300 hover:-translate-y-1.5 hover:border-transparent hover:shadow-card-hover"
+      style={{
+        animationDelay: `${index * 60}ms`,
+        backgroundImage: `linear-gradient(150deg, ${tint(
+          solution.color,
+          0.16
+        )}, ${tint(solution.color, 0.05)} 55%, #ffffff 100%)`,
+      }}
     >
       {/* glow that appears on hover, tinted by the solution color */}
       <span
@@ -34,8 +40,8 @@ export default function SolutionCard({ solution, stats, index = 0 }: Props) {
           style={{
             backgroundImage: `linear-gradient(135deg, ${tint(
               solution.color,
-              0.18
-            )}, ${tint(solution.color, 0.08)})`,
+              0.32
+            )}, ${tint(solution.color, 0.14)})`,
             color: solution.color,
           }}
         >
@@ -58,16 +64,13 @@ export default function SolutionCard({ solution, stats, index = 0 }: Props) {
         {solution.name}
       </h3>
       <p
-        className="relative text-sm font-semibold"
+        className="relative mb-1 flex-1 text-sm font-semibold"
         style={{ color: solution.color }}
       >
         {solution.tagline}
       </p>
-      <p className="relative mt-2 flex-1 text-sm leading-relaxed text-slate-500">
-        {solution.description}
-      </p>
 
-      <div className="relative mt-5 flex items-center gap-2 border-t border-slate-100 pt-4">
+      <div className="relative mt-5 flex items-center gap-2 border-t border-slate-200/70 pt-4">
         <Stat value={stats.modules} label="modules" />
         <Dot />
         <Stat value={stats.flows} label="flows" />

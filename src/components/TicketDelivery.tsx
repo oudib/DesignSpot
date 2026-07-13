@@ -2,7 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { setTicketStatus, deleteDesign, deleteDesignAttachment } from "@/app/manage/actions";
+import {
+  setTicketStatus,
+  updateDesign,
+  deleteDesign,
+  deleteDesignAttachment,
+} from "@/app/manage/actions";
 import DeliveryDialog from "@/components/DeliveryDialog";
 import Spinner from "@/components/Spinner";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
@@ -120,9 +125,7 @@ export function DeliverablesCard({
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
-  const attachments = designs.flatMap((d) => d.attachments);
-  const links = designs.filter((d) => d.claudeUrl);
-  const total = attachments.length + links.length;
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div className="card p-5">
@@ -130,7 +133,7 @@ export function DeliverablesCard({
         <h2 className="font-bold">
           Deliverables
           <span className="ml-2 text-sm font-normal text-slate-400">
-            {total}
+            {designs.length}
           </span>
         </h2>
         {ticket.flowId && (
@@ -144,73 +147,159 @@ export function DeliverablesCard({
         )}
       </div>
 
-      {total === 0 ? (
+      {designs.length === 0 ? (
         <p className="mt-3 text-sm text-slate-400">
           {ticket.flowId
             ? "No files or links delivered yet."
             : "Attach this ticket to a flow (from the tickets board) to deliver files here."}
         </p>
       ) : (
-        <ul className="mt-3 space-y-2">
-          {links.map((d) => (
-            <li key={`link-${d.id}`} className="flex items-center justify-between gap-2 text-sm">
-              <a
-                href={d.claudeUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-w-0 items-center gap-1.5 text-slate-600 hover:text-brand-600"
-              >
-                <span>🔗</span>
-                <span className="truncate">
-                  {d.title}
-                  {d.variant && ` (${d.variant})`}
-                </span>
-              </a>
-              {canManage && (
-                <form action={deleteDesign}>
+        <ul className="mt-3 space-y-3">
+          {designs.map((d) =>
+            editingId === d.id ? (
+              <li key={d.id}>
+                <form
+                  action={updateDesign}
+                  onSubmit={() => setTimeout(() => setEditingId(null), 0)}
+                  className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/30 p-3"
+                >
                   <input type="hidden" name="id" value={d.id} />
-                  <button
-                    type="submit"
-                    className="shrink-0 text-slate-400 hover:text-red-600"
-                  >
-                    ✕
-                  </button>
+                  <input
+                    name="title"
+                    defaultValue={d.title}
+                    required
+                    className="input py-1 text-sm"
+                    placeholder="Title"
+                  />
+                  <div className="flex gap-2">
+                    <input
+                      name="variant"
+                      defaultValue={d.variant}
+                      className="input py-1 text-sm"
+                      placeholder="Variant (optional)"
+                    />
+                    <input
+                      name="claudeUrl"
+                      type="url"
+                      defaultValue={d.claudeUrl}
+                      className="input py-1 text-sm"
+                      placeholder="https://claude.ai/… (optional)"
+                    />
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(null)}
+                      className="btn-secondary btn-sm"
+                    >
+                      Cancel
+                    </button>
+                    <button type="submit" className="btn-primary btn-sm">
+                      Save
+                    </button>
+                  </div>
                 </form>
-              )}
-            </li>
-          ))}
-          {attachments.map((att) => (
-            <li key={att.id} className="flex items-center justify-between gap-2 text-sm">
-              <a
-                href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-w-0 items-center gap-1.5 text-slate-600 hover:text-brand-600"
-              >
-                <span>{att.kind === "html" ? "◈" : "📎"}</span>
-                <span className="truncate">{att.name}</span>
-                <span className="shrink-0 text-xs text-slate-400">
-                  {fmtSize(att.size)}
-                </span>
-                {att.kind === "html" && (
-                  <span className="badge bg-brand-50 text-brand-700">
-                    standalone HTML
-                  </span>
+              </li>
+            ) : (
+              <li key={d.id} className="space-y-1.5 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5 text-slate-600">
+                    <span>{d.claudeUrl ? "🔗" : "◑"}</span>
+                    {d.claudeUrl ? (
+                      <a
+                        href={d.claudeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="truncate hover:text-brand-600"
+                      >
+                        {d.title}
+                        {d.variant && ` (${d.variant})`}
+                      </a>
+                    ) : (
+                      <span className="truncate">
+                        {d.title}
+                        {d.variant && ` (${d.variant})`}
+                      </span>
+                    )}
+                  </div>
+                  {canManage && (
+                    <div className="flex shrink-0 items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setEditingId(d.id)}
+                        className="text-xs font-medium text-slate-400 hover:text-brand-600"
+                      >
+                        Edit
+                      </button>
+                      <form
+                        action={deleteDesign}
+                        onSubmit={(e) => {
+                          if (
+                            !confirm(
+                              `Delete "${d.title}"? This also removes its attachments.`,
+                            )
+                          ) {
+                            e.preventDefault();
+                          }
+                        }}
+                      >
+                        <input type="hidden" name="id" value={d.id} />
+                        <button
+                          type="submit"
+                          className="text-slate-400 hover:text-red-600"
+                        >
+                          ✕
+                        </button>
+                      </form>
+                    </div>
+                  )}
+                </div>
+                {d.attachments.length > 0 && (
+                  <ul className="ml-5 space-y-1">
+                    {d.attachments.map((att) => (
+                      <li
+                        key={att.id}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <a
+                          href={
+                            att.kind === "html"
+                              ? attachmentPreviewUrl(att.url)
+                              : att.url
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex min-w-0 items-center gap-1.5 text-slate-500 hover:text-brand-600"
+                        >
+                          <span>{att.kind === "html" ? "◈" : "📎"}</span>
+                          <span className="truncate">{att.name}</span>
+                          <span className="shrink-0 text-xs text-slate-400">
+                            {fmtSize(att.size)}
+                          </span>
+                          {att.kind === "html" && (
+                            <span className="badge bg-brand-50 text-brand-700">
+                              standalone HTML
+                            </span>
+                          )}
+                        </a>
+                        {canManage && (
+                          <form action={deleteDesignAttachment}>
+                            <input type="hidden" name="id" value={att.id} />
+                            <button
+                              type="submit"
+                              className="shrink-0 text-slate-400 hover:text-red-600"
+                            >
+                              ✕
+                            </button>
+                          </form>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 )}
-              </a>
-              {canManage && (
-                <form action={deleteDesignAttachment}>
-                  <input type="hidden" name="id" value={att.id} />
-                  <button
-                    type="submit"
-                    className="shrink-0 text-slate-400 hover:text-red-600"
-                  >
-                    ✕
-                  </button>
-                </form>
-              )}
-            </li>
-          ))}
+              </li>
+            ),
+          )}
         </ul>
       )}
 

@@ -43,20 +43,7 @@ export default async function HomePage() {
       <main className="mx-auto max-w-6xl px-4 pb-20 pt-10 sm:px-6 sm:pt-14">
         {/* Onboarding-style intro — compact, straight to the point */}
         <div className="animate-rise relative z-30 max-w-2xl">
-          <span className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-500 shadow-sm">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Sobrus Design Hub
-          </span>
-          <h1 className="mt-4 text-3xl font-extrabold tracking-tight text-slate-900 sm:text-4xl">
-            Pick a solution to get started
-          </h1>
-          <p className="mt-2 text-base text-slate-500">
-            Choose a product to explore its modules, flows and Claude designs.
-          </p>
-
-          <div className="mt-6">
-            <HomeSearch />
-          </div>
+          <HomeSearch />
         </div>
 
         {/* Solutions grid */}
