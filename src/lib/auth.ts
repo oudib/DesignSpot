@@ -3,7 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 
 const COOKIE_NAME = "sobrus_ds_session";
 
-// Only company accounts may sign in (Google login and password login).
+// Only company accounts may sign in (Google login only).
 export const ALLOWED_EMAIL_DOMAIN = "sobrus.com";
 
 // Roles: "viewer" (browse only — the default for new sign-ins),
