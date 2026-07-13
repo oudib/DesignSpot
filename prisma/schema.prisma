@@ -28,6 +28,24 @@ model User {
 
   tickets  Ticket[]
   comments Comment[]
+
+  // Optional custom "Generate a prompt" template for this designer, edited by
+  // an admin in /manage/prompt-builder. Takes priority over the ticket's
+  // Solution.promptTemplate, if both are set. Null = no personal override.
+  promptTemplate PromptTemplate?
+}
+
+// A per-designer override of the design-brief prompt template used by the
+// "Generate a prompt" button on a ticket. See src/lib/designPrompt.ts for the
+// placeholder syntax ({{title}}, {{accent}}, …), the built-in default, and
+// Solution.promptTemplate for the per-solution layer.
+model PromptTemplate {
+  id        String   @id @default(cuid())
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Solution {
@@ -42,6 +60,11 @@ model Solution {
   order       Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  // Optional custom "Generate a prompt" template for this solution, edited by
+  // an admin in /manage/prompt-builder. Null = use the built-in default. A
+  // designer's own PromptTemplate (if set) takes priority over this.
+  promptTemplate String?
 
   modules Module[]
   tickets Ticket[]

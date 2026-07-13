@@ -13,6 +13,7 @@ const ITEMS = [
 
 const ADMIN_ITEMS = [
   { href: "/manage/users", label: "Users & access", exact: false },
+  { href: "/manage/prompt-builder", label: "Prompt builder", exact: false },
 ];
 
 export default function ManageNav({ isAdmin = false }: { isAdmin?: boolean }) {

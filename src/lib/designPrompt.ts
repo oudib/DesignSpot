@@ -1,5 +1,9 @@
 // Builds the "Generate a prompt" design brief handed to Claude from a ticket.
-// Pure/string-only so it can be unit-reasoned about and reused server-side.
+// The wording lives in an editable template (see DEFAULT_PROMPT_TEMPLATE)
+// with {{placeholder}} tokens — a designer can have their own override,
+// edited by an admin in /manage/prompt-builder (see PromptTemplate in
+// prisma/schema.prisma). Pure/string-only so it can be unit-reasoned about
+// and reused server-side.
 
 import type { LinearIssue } from "@/lib/linear";
 
@@ -40,7 +44,82 @@ function languageName(code: string): string {
   }
 }
 
-export function buildDesignPrompt(input: DesignPromptInput): string {
+// Placeholders available to a prompt template. A few of these already carry
+// their own bullet/blank-line formatting so a template can stay simple while
+// still omitting a line cleanly when the underlying data is missing (e.g. a
+// solution with no description, or a ticket with no linked Linear issue).
+export type PromptVars = {
+  title: string;
+  solutionName: string;
+  // " — tagline" if the solution has one, else "".
+  taglineClause: string;
+  // "- **About X:** …\n" if the solution has a description, else "".
+  aboutBullet: string;
+  // "- **Where this lives:** …\n" if there's a hierarchy path, else "".
+  locationBullet: string;
+  language: string;
+  // "\n\n<description>" if the ticket/issue has one, else "".
+  descriptionBlock: string;
+  // "> Linear issue: … · Status: …\n\n" if a Linear issue is linked, else "".
+  linearMetaBlock: string;
+  accent: string;
+};
+
+export const PROMPT_PLACEHOLDERS: { key: keyof PromptVars; label: string }[] = [
+  { key: "title", label: "Ticket / Linear issue title" },
+  { key: "solutionName", label: "Product name, e.g. \"ERP\"" },
+  { key: "taglineClause", label: "\" — tagline\", or empty if none" },
+  { key: "aboutBullet", label: "\"- **About X:** …\" bullet, or empty if no description" },
+  { key: "locationBullet", label: "\"- **Where this lives:** …\" bullet, or empty" },
+  { key: "language", label: "Interface language, e.g. \"French\"" },
+  { key: "descriptionBlock", label: "The ticket/issue description, or empty" },
+  { key: "linearMetaBlock", label: "Linear status/priority/labels blockquote, or empty" },
+  { key: "accent", label: "Product brand hex color" },
+];
+
+export const DEFAULT_PROMPT_TEMPLATE = `# Design brief: {{title}}
+
+You are a senior product designer. Produce a high-fidelity, production-ready UI design for **Sobrus {{solutionName}}**{{taglineClause}}.
+
+## Product context
+{{aboutBullet}}{{locationBullet}}- **Interface language:** write every label, button, message and piece of placeholder content in {{language}}. Do not use lorem ipsum — use realistic content for a pharmacy / healthcare SaaS.
+
+## What to design
+**{{title}}**{{descriptionBlock}}
+
+{{linearMetaBlock}}## Brand & visual rules
+- **Primary brand color: \`{{accent}}\`.** Use it for primary actions, active/selected states, links, focus rings and key highlights. Derive lighter tints for backgrounds/hover and darker shades for pressed states from this same hue — do not introduce unrelated accent colors.
+- Build on a neutral foundation: white/very-light surfaces, slate-gray text and borders, so the brand color stands out.
+- Ensure all text meets **WCAG AA** contrast against its background; never put the brand color as text on a saturated background of the same hue.
+- Use a consistent spacing scale (4 / 8 px rhythm), generous whitespace, rounded corners and subtle shadows for elevation.
+- Establish a clear typographic hierarchy (page title → section → body → caption) with a clean sans-serif.
+- Keep components consistent with a modern SaaS dashboard: well-defined buttons, inputs, tables, cards, badges and modals.
+- Use icons exclusively from the **Phosphor Icons** set (not Lucide or any other icon library).
+
+## Deliverable rules
+- Design the complete screen/flow described above, desktop-first but responsive down to mobile.
+- Show the relevant UI states: default, hover/focus, loading, empty and error.
+- Make it an interactive, clickable prototype where that helps demonstrate the flow.
+- Prioritize clarity, usability, accessibility and visual polish.
+- Annotate any non-obvious interactions or business rules briefly so the intent is clear.
+
+---
+
+**Extra informations (optional):**
+Add any extra details, constraints or specific changes here. If a screenshot of the current screen is attached, treat it as the UI we have today — use it as the starting point and apply the requested changes on top of it, keeping everything that isn't mentioned.`;
+
+export function renderPromptTemplate(template: string, vars: PromptVars): string {
+  return template.replace(/{{\s*(\w+)\s*}}/g, (match, key: string) =>
+    Object.prototype.hasOwnProperty.call(vars, key)
+      ? vars[key as keyof PromptVars]
+      : match
+  );
+}
+
+export function buildDesignPrompt(
+  input: DesignPromptInput,
+  template: string = DEFAULT_PROMPT_TEMPLATE
+): string {
   const { ticket, solution, path, linear } = input;
 
   // Prefer the live Linear content; fall back to the local ticket fields.
@@ -56,94 +135,27 @@ export function buildDesignPrompt(input: DesignPromptInput): string {
   );
   const location = locationParts.join(" › ");
 
-  const lines: string[] = [];
-
-  lines.push(`# Design brief: ${title}`);
-  lines.push("");
-  lines.push(
-    `You are a senior product designer. Produce a high-fidelity, production-ready UI design for **Sobrus ${solName}**${
-      solution?.tagline ? ` — ${solution.tagline}` : ""
-    }.`
-  );
-  lines.push("");
-
-  // ---- Product context ----
-  lines.push("## Product context");
-  if (solution?.description) lines.push(`- **About ${solName}:** ${solution.description}`);
-  if (location) lines.push(`- **Where this lives:** ${location}`);
-  lines.push(
-    `- **Interface language:** write every label, button, message and piece of placeholder content in ${lang}. Do not use lorem ipsum — use realistic content for a pharmacy / healthcare SaaS.`
-  );
-  lines.push("");
-
-  // ---- What to design ----
-  lines.push("## What to design");
-  lines.push(`**${title}**`);
-  if (description) {
-    lines.push("");
-    lines.push(description);
-  }
-  lines.push("");
-
-  // ---- Linear metadata ----
+  const meta: string[] = [];
   if (linear) {
-    const meta: string[] = [];
     if (linear.identifier) meta.push(`Linear issue: ${linear.identifier}`);
     if (linear.state) meta.push(`Status: ${linear.state}`);
     if (linear.priorityLabel) meta.push(`Priority: ${linear.priorityLabel}`);
     if (linear.labels.length) meta.push(`Labels: ${linear.labels.join(", ")}`);
-    if (meta.length) {
-      lines.push(`> ${meta.join(" · ")}`);
-      lines.push("");
-    }
   }
 
-  // ---- Brand & visual rules ----
-  lines.push("## Brand & visual rules");
-  lines.push(
-    `- **Primary brand color: \`${accent}\`.** Use it for primary actions, active/selected states, links, focus rings and key highlights. Derive lighter tints for backgrounds/hover and darker shades for pressed states from this same hue — do not introduce unrelated accent colors.`
-  );
-  lines.push(
-    "- Build on a neutral foundation: white/very-light surfaces, slate-gray text and borders, so the brand color stands out."
-  );
-  lines.push(
-    "- Ensure all text meets **WCAG AA** contrast against its background; never put the brand color as text on a saturated background of the same hue."
-  );
-  lines.push(
-    "- Use a consistent spacing scale (4 / 8 px rhythm), generous whitespace, rounded corners and subtle shadows for elevation."
-  );
-  lines.push(
-    "- Establish a clear typographic hierarchy (page title → section → body → caption) with a clean sans-serif."
-  );
-  lines.push(
-    "- Keep components consistent with a modern SaaS dashboard: well-defined buttons, inputs, tables, cards, badges and modals."
-  );
-  lines.push("");
+  const vars: PromptVars = {
+    title,
+    solutionName: solName,
+    taglineClause: solution?.tagline ? ` — ${solution.tagline}` : "",
+    aboutBullet: solution?.description
+      ? `- **About ${solName}:** ${solution.description}\n`
+      : "",
+    locationBullet: location ? `- **Where this lives:** ${location}\n` : "",
+    language: lang,
+    descriptionBlock: description ? `\n\n${description}` : "",
+    linearMetaBlock: meta.length ? `> ${meta.join(" · ")}\n\n` : "",
+    accent,
+  };
 
-  // ---- Deliverable rules ----
-  lines.push("## Deliverable rules");
-  lines.push(
-    "- Design the complete screen/flow described above, desktop-first but responsive down to mobile."
-  );
-  lines.push(
-    "- Show the relevant UI states: default, hover/focus, loading, empty and error."
-  );
-  lines.push(
-    "- Make it an interactive, clickable prototype where that helps demonstrate the flow."
-  );
-  lines.push("- Prioritize clarity, usability, accessibility and visual polish.");
-  lines.push(
-    "- Annotate any non-obvious interactions or business rules briefly so the intent is clear."
-  );
-  lines.push("");
-
-  // ---- Optional extras (filled in by the designer before sending) ----
-  lines.push("---");
-  lines.push("");
-  lines.push("**Extra informations (optional):**");
-  lines.push(
-    "Add any extra details, constraints or specific changes here. If a screenshot of the current screen is attached, treat it as the UI we have today — use it as the starting point and apply the requested changes on top of it, keeping everything that isn't mentioned."
-  );
-
-  return lines.join("\n");
+  return renderPromptTemplate(template, vars);
 }

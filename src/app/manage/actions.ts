@@ -661,29 +661,40 @@ export async function generateDesignPrompt(
     ? await getLinearIssue(await actingLinearKey(session.userId), ticket.linearUrl)
     : null;
 
-  const prompt = buildDesignPrompt({
-    ticket: {
-      title: ticket.title,
-      description: ticket.description,
-      priority: ticket.priority,
-      linearUrl: ticket.linearUrl,
+  // Template priority: the assigned designer's own override, then the
+  // ticket's solution override, then the built-in default — all edited by
+  // an admin in /manage/prompt-builder.
+  const designerTemplate = ticket.assigneeId
+    ? await prisma.promptTemplate.findUnique({ where: { userId: ticket.assigneeId } })
+    : null;
+  const template = designerTemplate?.body ?? ticket.solution?.promptTemplate ?? undefined;
+
+  const prompt = buildDesignPrompt(
+    {
+      ticket: {
+        title: ticket.title,
+        description: ticket.description,
+        priority: ticket.priority,
+        linearUrl: ticket.linearUrl,
+      },
+      solution: ticket.solution
+        ? {
+            name: ticket.solution.name,
+            tagline: ticket.solution.tagline,
+            description: ticket.solution.description,
+            color: ticket.solution.color,
+            language: ticket.solution.language,
+          }
+        : null,
+      path: {
+        module: ticket.flow?.submodule?.module?.name ?? null,
+        submodule: ticket.flow?.submodule?.name ?? null,
+        flow: ticket.flow?.name ?? null,
+      },
+      linear,
     },
-    solution: ticket.solution
-      ? {
-          name: ticket.solution.name,
-          tagline: ticket.solution.tagline,
-          description: ticket.solution.description,
-          color: ticket.solution.color,
-          language: ticket.solution.language,
-        }
-      : null,
-    path: {
-      module: ticket.flow?.submodule?.module?.name ?? null,
-      submodule: ticket.flow?.submodule?.name ?? null,
-      flow: ticket.flow?.name ?? null,
-    },
-    linear,
-  });
+    template
+  );
 
   return { prompt };
 }
