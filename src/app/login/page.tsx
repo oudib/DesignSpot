@@ -46,9 +46,9 @@ function LoginForm() {
       </Link>
 
       <div className="card p-8">
-        <h1 className="text-xl font-bold tracking-tight">Designer sign in</h1>
+        <h1 className="text-xl font-bold tracking-tight">Sign In</h1>
         <p className="mt-1 text-sm text-slate-500">
-          Sign in to manage tickets and designs.
+          Sign in to see and manage tickets and designs.
         </p>
 
         <a
