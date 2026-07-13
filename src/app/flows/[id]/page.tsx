@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import { prisma } from "@/lib/db";
 import { tint, statusMeta, priorityMeta } from "@/lib/utils";
-import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
+import FlowDesignsPanel from "@/components/FlowDesignsPanel";
 
 export const dynamic = "force-dynamic";
 
@@ -153,88 +153,7 @@ export default async function FlowPage({
               </h2>
             </div>
 
-            {flow.designs.length === 0 ? (
-              <div className="card p-8 text-center text-slate-500">
-                No designs linked yet. Add Claude design links from the{" "}
-                <Link
-                  href="/manage/structure"
-                  className="text-brand-600 underline"
-                >
-                  workspace
-                </Link>
-                .
-              </div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2">
-                {flow.designs.map((design, i) => (
-                  <div
-                    key={design.id}
-                    className="animate-rise group rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
-                    style={{ animationDelay: `${i * 50}ms` }}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2.5">
-                          <span
-                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm"
-                            style={{
-                              backgroundImage: `linear-gradient(135deg, ${tint(
-                                color,
-                                0.18
-                              )}, ${tint(color, 0.08)})`,
-                              color,
-                            }}
-                          >
-                            ◑
-                          </span>
-                          <p className="truncate font-semibold text-slate-800">
-                            {design.title}
-                          </p>
-                        </div>
-                        {design.variant && (
-                          <span className="badge mt-2 bg-slate-100 text-slate-500">
-                            {design.variant}
-                          </span>
-                        )}
-                      </div>
-                      {design.claudeUrl && (
-                        <a
-                          href={design.claudeUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 text-sm font-semibold text-brand-600 opacity-0 transition group-hover:opacity-100"
-                        >
-                          Open ↗
-                        </a>
-                      )}
-                    </div>
-
-                    {design.attachments.length > 0 && (
-                      <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
-                        {design.attachments.map((att) => (
-                          <li key={att.id}>
-                            <a
-                              href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 text-sm text-slate-600 hover:text-brand-600"
-                            >
-                              <span>{att.kind === "html" ? "◈" : "📎"}</span>
-                              <span className="truncate">{att.name}</span>
-                              {att.kind === "html" && (
-                                <span className="badge shrink-0 bg-brand-50 text-brand-700">
-                                  Preview standalone HTML
-                                </span>
-                              )}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <FlowDesignsPanel designs={flow.designs} color={color} />
           </section>
 
           {/* Tickets — work items, each with its attached Linear link */}
@@ -269,9 +188,12 @@ export default async function FlowPage({
                       className="card flex items-start justify-between gap-4 p-4"
                     >
                       <div className="min-w-0">
-                        <p className="truncate font-semibold text-slate-800">
+                        <Link
+                          href={`/manage/tickets/${t.id}`}
+                          className="truncate font-semibold text-slate-800 hover:text-brand-600"
+                        >
                           {t.title}
-                        </p>
+                        </Link>
                         {t.description && (
                           <p className="mt-0.5 truncate text-sm text-slate-400">
                             {t.description}
@@ -287,16 +209,24 @@ export default async function FlowPage({
                           )}
                         </div>
                       </div>
-                      {t.linearUrl && (
-                        <a
-                          href={t.linearUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="btn-secondary btn-sm shrink-0"
+                      <div className="flex shrink-0 items-center gap-2">
+                        <Link
+                          href={`/manage/tickets/${t.id}`}
+                          className="btn-secondary btn-sm"
                         >
-                          <span className="text-violet-600">◆</span> Linear ↗
-                        </a>
-                      )}
+                          Edit
+                        </Link>
+                        {t.linearUrl && (
+                          <a
+                            href={t.linearUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="btn-secondary btn-sm"
+                          >
+                            <span className="text-violet-600">◆</span> Linear ↗
+                          </a>
+                        )}
+                      </div>
                     </div>
                   );
                 })}

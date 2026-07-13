@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   createTicket,
@@ -8,7 +8,12 @@ import {
   deleteTicket,
   setTicketStatus,
 } from "@/app/manage/actions";
-import { TICKET_STATUSES, TICKET_PRIORITIES, priorityMeta } from "@/lib/utils";
+import {
+  TICKET_STATUSES,
+  TICKET_PRIORITIES,
+  priorityMeta,
+  statusMeta,
+} from "@/lib/utils";
 import HierarchyPicker, { type SolLite } from "@/components/HierarchyPicker";
 import DeliveryDialog from "@/components/DeliveryDialog";
 import Spinner from "@/components/Spinner";
@@ -26,8 +31,26 @@ type Ticket = {
   solutionName: string | null;
   flowId: string | null;
   flowName: string | null;
+  updatedAt: string;
 };
 type Option = { id: string; name: string };
+
+// Done cards fall off the board after this long — the ticket itself is
+// never deleted, just no longer shown on the kanban. Find it again in the
+// History table below, searchable regardless of age.
+const DONE_VISIBLE_MS = 7 * 24 * 60 * 60 * 1000;
+
+function isRecentlyDone(t: Ticket) {
+  return Date.now() - new Date(t.updatedAt).getTime() <= DONE_VISIBLE_MS;
+}
+
+function fmtDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 export default function TicketsClient({
   tickets,
@@ -55,6 +78,7 @@ export default function TicketsClient({
   // comment we'd have to revert.
   const [designPrompt, setDesignPrompt] = useState<Ticket | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [view, setView] = useState<"board" | "history">("board");
 
   function setStatus(id: string, status: string) {
     setStatusLocal(id, status);
@@ -92,88 +116,124 @@ export default function TicketsClient({
 
   return (
     <div>
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold tracking-tight">
             Tickets
             {isPending && <Spinner className="text-slate-400" />}
           </h1>
           <p className="mt-1 text-slate-500">
-            Drag a card between columns to change its status.
+            {view === "board"
+              ? "Drag a card between columns to change its status. Done cards hide from the board after 7 days — find them in History."
+              : "Every ticket, including ones no longer shown on the board."}
           </p>
         </div>
-        <button className="btn-primary" onClick={() => setCreating(true)}>
-          + New ticket
-        </button>
-      </div>
-
-      <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {TICKET_STATUSES.map((col) => {
-          const items = board.filter((t) => t.status === col.value);
-          const isOver = dragOverCol === col.value;
-          return (
-            <div
-              key={col.value}
-              onDragOver={(e) => {
-                if (!draggingId) return;
-                e.preventDefault();
-                e.dataTransfer.dropEffect = "move";
-                if (dragOverCol !== col.value) setDragOverCol(col.value);
-              }}
-              onDragLeave={(e) => {
-                // Only clear when the pointer truly leaves the column.
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                  setDragOverCol((c) => (c === col.value ? null : c));
-                }
-              }}
-              onDrop={(e) => {
-                e.preventDefault();
-                const id =
-                  e.dataTransfer.getData("text/plain") || draggingId;
-                if (id) moveTicket(id, col.value);
-                setDragOverCol(null);
-                setDraggingId(null);
-              }}
-              className={`rounded-2xl p-3 transition-colors ${
-                isOver
-                  ? "bg-brand-50 ring-2 ring-brand-300"
-                  : "bg-slate-100/70"
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg bg-slate-100 p-1">
+            <button
+              type="button"
+              onClick={() => setView("board")}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                view === "board"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
               }`}
             >
-              <div className="mb-3 flex items-center justify-between px-1">
-                <span className={`badge ${col.color}`}>{col.label}</span>
-                <span className="text-xs font-semibold text-slate-400">
-                  {items.length}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {items.map((t) => (
-                  <TicketCard
-                    key={t.id}
-                    ticket={t}
-                    dragging={draggingId === t.id}
-                    onDragStart={(e) => {
-                      setDraggingId(t.id);
-                      e.dataTransfer.effectAllowed = "move";
-                      e.dataTransfer.setData("text/plain", t.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingId(null);
-                      setDragOverCol(null);
-                    }}
-                    onEdit={() => setEditing(t)}
-                  />
-                ))}
-                {items.length === 0 && (
-                  <p className="px-1 py-6 text-center text-xs text-slate-400">
-                    {isOver ? "Drop here" : "Nothing here"}
-                  </p>
-                )}
-              </div>
-            </div>
-          );
-        })}
+              Board
+            </button>
+            <button
+              type="button"
+              onClick={() => setView("history")}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                view === "history"
+                  ? "bg-white text-slate-800 shadow-sm"
+                  : "text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              History
+            </button>
+          </div>
+          <button className="btn-primary" onClick={() => setCreating(true)}>
+            + New ticket
+          </button>
+        </div>
       </div>
+
+      {view === "board" ? (
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {TICKET_STATUSES.map((col) => {
+            const items = board.filter((t) => {
+              if (t.status !== col.value) return false;
+              if (col.value === "done" && !isRecentlyDone(t)) return false;
+              return true;
+            });
+            const isOver = dragOverCol === col.value;
+            return (
+              <div
+                key={col.value}
+                onDragOver={(e) => {
+                  if (!draggingId) return;
+                  e.preventDefault();
+                  e.dataTransfer.dropEffect = "move";
+                  if (dragOverCol !== col.value) setDragOverCol(col.value);
+                }}
+                onDragLeave={(e) => {
+                  // Only clear when the pointer truly leaves the column.
+                  if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setDragOverCol((c) => (c === col.value ? null : c));
+                  }
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const id =
+                    e.dataTransfer.getData("text/plain") || draggingId;
+                  if (id) moveTicket(id, col.value);
+                  setDragOverCol(null);
+                  setDraggingId(null);
+                }}
+                className={`rounded-2xl p-3 transition-colors ${
+                  isOver
+                    ? "bg-brand-50 ring-2 ring-brand-300"
+                    : "bg-slate-100/70"
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between px-1">
+                  <span className={`badge ${col.color}`}>{col.label}</span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    {items.length}
+                  </span>
+                </div>
+                <div className="space-y-3">
+                  {items.map((t) => (
+                    <TicketCard
+                      key={t.id}
+                      ticket={t}
+                      dragging={draggingId === t.id}
+                      onDragStart={(e) => {
+                        setDraggingId(t.id);
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", t.id);
+                      }}
+                      onDragEnd={() => {
+                        setDraggingId(null);
+                        setDragOverCol(null);
+                      }}
+                      onEdit={() => setEditing(t)}
+                    />
+                  ))}
+                  {items.length === 0 && (
+                    <p className="px-1 py-6 text-center text-xs text-slate-400">
+                      {isOver ? "Drop here" : "Nothing here"}
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <TicketHistoryTable tickets={board} />
+      )}
 
       {(creating || editing) && (
         <TicketDialog
@@ -205,6 +265,133 @@ export default function TicketsClient({
           onCancel={() => setDesignPrompt(null)}
         />
       )}
+    </div>
+  );
+}
+
+function TicketHistoryTable({ tickets }: { tickets: Ticket[] }) {
+  const [q, setQ] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return tickets
+      .filter((t) => statusFilter === "all" || t.status === statusFilter)
+      .filter((t) => {
+        if (!term) return true;
+        return [
+          t.title,
+          t.description,
+          t.assigneeName,
+          t.solutionName,
+          t.flowName,
+        ]
+          .filter(Boolean)
+          .some((v) => v!.toLowerCase().includes(term));
+      })
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+  }, [tickets, q, statusFilter]);
+
+  return (
+    <div className="mt-6">
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search title, assignee, solution, flow…"
+          className="input max-w-xs"
+        />
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="input w-44"
+        >
+          <option value="all">All statuses</option>
+          {TICKET_STATUSES.map((s) => (
+            <option key={s.value} value={s.value}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+        <span className="ml-auto text-xs font-medium text-slate-400">
+          {filtered.length} ticket{filtered.length === 1 ? "" : "s"}
+        </span>
+      </div>
+
+      <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-200/70 bg-white">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <tr>
+              <th className="px-4 py-2.5">Title</th>
+              <th className="px-4 py-2.5">Status</th>
+              <th className="px-4 py-2.5">Priority</th>
+              <th className="px-4 py-2.5">Assignee</th>
+              <th className="px-4 py-2.5">Solution</th>
+              <th className="px-4 py-2.5">Flow</th>
+              <th className="px-4 py-2.5">Updated</th>
+              <th className="px-4 py-2.5" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {filtered.map((t) => {
+              const sm = statusMeta(t.status);
+              const pm = priorityMeta(t.priority);
+              return (
+                <tr key={t.id} className="hover:bg-slate-50/70">
+                  <td className="max-w-xs truncate px-4 py-2.5">
+                    <Link
+                      href={`/manage/tickets/${t.id}`}
+                      className="font-medium text-slate-800 hover:text-brand-600"
+                    >
+                      {t.title}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`badge ${sm.color}`}>{sm.label}</span>
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <span className={`badge ${pm.color}`}>{pm.label}</span>
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-500">
+                    {t.assigneeName ?? "Unassigned"}
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-500">
+                    {t.solutionName ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-slate-500">
+                    {t.flowName ?? "—"}
+                  </td>
+                  <td className="px-4 py-2.5 whitespace-nowrap text-slate-400">
+                    {fmtDate(t.updatedAt)}
+                  </td>
+                  <td className="px-4 py-2.5 text-right">
+                    {t.linearUrl && (
+                      <a
+                        href={t.linearUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-semibold text-violet-600 hover:underline"
+                      >
+                        Linear ↗
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+            {filtered.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-400">
+                  No tickets match.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

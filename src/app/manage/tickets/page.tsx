@@ -55,6 +55,7 @@ export default async function TicketsPage() {
     solutionName: t.solution?.name ?? null,
     flowId: t.flowId,
     flowName: t.flow?.name ?? null,
+    updatedAt: t.updatedAt.toISOString(),
   }));
 
   return (
