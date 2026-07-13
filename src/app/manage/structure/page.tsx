@@ -1,9 +1,11 @@
 import { prisma } from "@/lib/db";
 import StructureClient from "@/components/StructureClient";
+import { currentActor } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
 export default async function StructurePage() {
+  const actor = await currentActor();
   const solutions = await prisma.solution.findMany({
     orderBy: { order: "asc" },
     include: {
@@ -21,6 +23,7 @@ export default async function StructurePage() {
                     include: { attachments: { orderBy: { createdAt: "asc" } } },
                   },
                   linearTickets: { orderBy: { date: "desc" } },
+                  tickets: { select: { assigneeId: true } },
                 },
               },
             },
@@ -69,10 +72,23 @@ export default async function StructurePage() {
             label: lt.label,
             date: lt.date.toISOString().slice(0, 10),
           })),
+          designerIds: Array.from(
+            new Set(
+              f.tickets
+                .map((t) => t.assigneeId)
+                .filter((id): id is string => !!id)
+            )
+          ),
         })),
       })),
     })),
   }));
 
-  return <StructureClient solutions={data} />;
+  return (
+    <StructureClient
+      solutions={data}
+      isAdmin={actor?.isAdmin ?? false}
+      currentUserId={actor?.userId ?? null}
+    />
+  );
 }

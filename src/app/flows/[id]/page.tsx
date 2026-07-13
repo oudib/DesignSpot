@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import SiteHeader from "@/components/SiteHeader";
 import { prisma } from "@/lib/db";
 import { tint, statusMeta, priorityMeta } from "@/lib/utils";
+import { currentActor } from "@/lib/access";
 import FlowDesignsPanel from "@/components/FlowDesignsPanel";
 
 export const dynamic = "force-dynamic";
@@ -61,6 +62,13 @@ export default async function FlowPage({
         .map((t) => [t.assignee!.id, t.assignee!])
     ).values()
   );
+
+  // Only an admin, or a designer already responsible for this flow (assignee
+  // on at least one of its tickets), gets edit/delete controls here.
+  const actor = await currentActor();
+  const canManage =
+    !!actor &&
+    (actor.isAdmin || designers.some((d) => d.id === actor.userId));
 
 
   return (
@@ -153,7 +161,11 @@ export default async function FlowPage({
               </h2>
             </div>
 
-            <FlowDesignsPanel designs={flow.designs} color={color} />
+            <FlowDesignsPanel
+              designs={flow.designs}
+              color={color}
+              canManage={canManage}
+            />
           </section>
 
           {/* Tickets — work items, each with its attached Linear link */}
@@ -210,12 +222,14 @@ export default async function FlowPage({
                         </div>
                       </div>
                       <div className="flex shrink-0 items-center gap-2">
-                        <Link
-                          href={`/manage/tickets/${t.id}`}
-                          className="btn-secondary btn-sm"
-                        >
-                          Edit
-                        </Link>
+                        {canManage && (
+                          <Link
+                            href={`/manage/tickets/${t.id}`}
+                            className="btn-secondary btn-sm"
+                          >
+                            Edit
+                          </Link>
+                        )}
                         {t.linearUrl && (
                           <a
                             href={t.linearUrl}

@@ -112,9 +112,11 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
 export function DeliverablesCard({
   ticket,
   designs,
+  canManage,
 }: {
   ticket: TicketLite;
   designs: DesignWithAttachments[];
+  canManage: boolean;
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
@@ -164,15 +166,17 @@ export function DeliverablesCard({
                   {d.variant && ` (${d.variant})`}
                 </span>
               </a>
-              <form action={deleteDesign}>
-                <input type="hidden" name="id" value={d.id} />
-                <button
-                  type="submit"
-                  className="shrink-0 text-slate-400 hover:text-red-600"
-                >
-                  ✕
-                </button>
-              </form>
+              {canManage && (
+                <form action={deleteDesign}>
+                  <input type="hidden" name="id" value={d.id} />
+                  <button
+                    type="submit"
+                    className="shrink-0 text-slate-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </form>
+              )}
             </li>
           ))}
           {attachments.map((att) => (
@@ -194,15 +198,17 @@ export function DeliverablesCard({
                   </span>
                 )}
               </a>
-              <form action={deleteDesignAttachment}>
-                <input type="hidden" name="id" value={att.id} />
-                <button
-                  type="submit"
-                  className="shrink-0 text-slate-400 hover:text-red-600"
-                >
-                  ✕
-                </button>
-              </form>
+              {canManage && (
+                <form action={deleteDesignAttachment}>
+                  <input type="hidden" name="id" value={att.id} />
+                  <button
+                    type="submit"
+                    className="shrink-0 text-slate-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </form>
+              )}
             </li>
           ))}
         </ul>

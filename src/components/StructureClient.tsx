@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { createContext, useContext, useState } from "react";
 import * as A from "@/app/manage/actions";
 import { cn, SOLUTION_LANGUAGES, languageMeta } from "@/lib/utils";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
@@ -33,6 +33,9 @@ type Flow = {
   description: string;
   designs: Design[];
   linearTickets: LinearTicket[];
+  // Ids of designers already assigned to a ticket on this flow — "responsible
+  // for the flow", used to decide who may edit/delete its designs.
+  designerIds: string[];
 };
 type Submodule = { id: string; name: string; flows: Flow[] };
 type Module = { id: string; name: string; submodules: Submodule[] };
@@ -48,11 +51,28 @@ type Solution = {
   modules: Module[];
 };
 
+/* --------------------------- Permissions ------------------------- */
+// Only an admin, or a designer already responsible for a flow (assignee on
+// at least one of its tickets), may edit/delete that flow's designs.
+const ActorContext = createContext<{ isAdmin: boolean; userId: string | null }>({
+  isAdmin: false,
+  userId: null,
+});
+
+function useCanManageFlow(flow: Flow) {
+  const actor = useContext(ActorContext);
+  return actor.isAdmin || (!!actor.userId && flow.designerIds.includes(actor.userId));
+}
+
 /* --------------------------- Component -------------------------- */
 export default function StructureClient({
   solutions,
+  isAdmin,
+  currentUserId,
 }: {
   solutions: Solution[];
+  isAdmin: boolean;
+  currentUserId: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(
     solutions[0]?.id ?? null
@@ -63,6 +83,7 @@ export default function StructureClient({
   const selected = solutions.find((s) => s.id === selectedId) ?? solutions[0];
 
   return (
+    <ActorContext.Provider value={{ isAdmin, userId: currentUserId }}>
     <div>
       <div className="flex items-center justify-between">
         <div>
@@ -190,6 +211,7 @@ export default function StructureClient({
         />
       )}
     </div>
+    </ActorContext.Provider>
   );
 }
 
@@ -286,6 +308,7 @@ function SubmoduleBlock({ submodule }: { submodule: Submodule }) {
 function FlowBlock({ flow }: { flow: Flow }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
+  const canManage = useCanManageFlow(flow);
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50/60">
       <div className="flex items-center justify-between px-3 py-2.5">
@@ -329,7 +352,7 @@ function FlowBlock({ flow }: { flow: Flow }) {
               Designs
             </p>
             {flow.designs.map((d) => (
-              <DesignRow key={d.id} design={d} />
+              <DesignRow key={d.id} design={d} canManage={canManage} />
             ))}
             <DesignAdd flowId={flow.id} />
           </div>
@@ -361,11 +384,17 @@ function fmtSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function DesignRow({ design }: { design: Design }) {
+function DesignRow({
+  design,
+  canManage,
+}: {
+  design: Design;
+  canManage: boolean;
+}) {
   const [editing, setEditing] = useState(false);
   const [addingFile, setAddingFile] = useState(false);
 
-  if (editing) {
+  if (editing && canManage) {
     return (
       <form
         action={A.updateDesign}
@@ -436,13 +465,21 @@ function DesignRow({ design }: { design: Design }) {
           >
             Attach
           </button>
-          <button
-            onClick={() => setEditing(true)}
-            className="text-xs font-medium text-slate-500 hover:text-brand-600"
-          >
-            Edit
-          </button>
-          <ConfirmDelete action={A.deleteDesign} id={design.id} label="design" />
+          {canManage && (
+            <>
+              <button
+                onClick={() => setEditing(true)}
+                className="text-xs font-medium text-slate-500 hover:text-brand-600"
+              >
+                Edit
+              </button>
+              <ConfirmDelete
+                action={A.deleteDesign}
+                id={design.id}
+                label="design"
+              />
+            </>
+          )}
         </div>
       </div>
 
@@ -470,15 +507,17 @@ function DesignRow({ design }: { design: Design }) {
                   </span>
                 )}
               </a>
-              <form action={A.deleteDesignAttachment}>
-                <input type="hidden" name="id" value={att.id} />
-                <button
-                  type="submit"
-                  className="shrink-0 text-slate-400 hover:text-red-600"
-                >
-                  ✕
-                </button>
-              </form>
+              {canManage && (
+                <form action={A.deleteDesignAttachment}>
+                  <input type="hidden" name="id" value={att.id} />
+                  <button
+                    type="submit"
+                    className="shrink-0 text-slate-400 hover:text-red-600"
+                  >
+                    ✕
+                  </button>
+                </form>
+              )}
             </li>
           ))}
         </ul>

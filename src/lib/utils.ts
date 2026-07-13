@@ -61,3 +61,37 @@ export function languageMeta(value: string) {
     SOLUTION_LANGUAGES.find((l) => l.value === value) ?? SOLUTION_LANGUAGES[0]
   );
 }
+
+/* ------------------------- Flow-level permissions ------------------------ */
+// A ticket/design can only be edited or deleted by an admin, or by a designer
+// "responsible for the flow" — i.e. already the assignee of at least one
+// other ticket on that same flow. Tickets with no flow (rare) fall back to
+// just their own assignee, since there's no flow group to belong to.
+
+export type Actor = { userId: string; isAdmin: boolean } | null;
+
+/** Builds flowId -> set of assignee ids from an already-loaded ticket list, so
+ * pages that fetch every ticket at once (the board) don't need N extra queries. */
+export function buildFlowDesignerMap(
+  tickets: { flowId: string | null; assigneeId: string | null }[]
+): Map<string, Set<string>> {
+  const map = new Map<string, Set<string>>();
+  for (const t of tickets) {
+    if (!t.flowId || !t.assigneeId) continue;
+    if (!map.has(t.flowId)) map.set(t.flowId, new Set());
+    map.get(t.flowId)!.add(t.assigneeId);
+  }
+  return map;
+}
+
+export function canManageWithMap(
+  actor: Actor,
+  flowId: string | null,
+  assigneeId: string | null,
+  designerMap: Map<string, Set<string>>
+): boolean {
+  if (!actor) return false;
+  if (actor.isAdmin) return true;
+  if (flowId) return designerMap.get(flowId)?.has(actor.userId) ?? false;
+  return !!assigneeId && assigneeId === actor.userId;
+}

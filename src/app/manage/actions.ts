@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession, destroySession, hasWorkspaceAccess } from "@/lib/auth";
+import { canManageFlow } from "@/lib/access";
 import { slugify } from "@/lib/utils";
 import {
   postLinearComment,
@@ -85,7 +86,7 @@ async function requireAuth() {
     select: { role: true },
   });
   if (!hasWorkspaceAccess(user?.role)) redirect("/");
-  return session;
+  return { userId: session.userId, isAdmin: user?.role === "admin" };
 }
 
 function s(fd: FormData, key: string) {
@@ -416,9 +417,14 @@ export async function createDesign(fd: FormData) {
 }
 
 export async function updateDesign(fd: FormData) {
-  await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
+  const design = await prisma.design.findUnique({
+    where: { id },
+    select: { flowId: true },
+  });
+  if (!design || !(await canManageFlow(actor, design.flowId))) return;
   await prisma.design.update({
     where: { id },
     data: {
@@ -431,9 +437,14 @@ export async function updateDesign(fd: FormData) {
 }
 
 export async function deleteDesign(fd: FormData) {
-  await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
+  const design = await prisma.design.findUnique({
+    where: { id },
+    select: { flowId: true },
+  });
+  if (!design || !(await canManageFlow(actor, design.flowId))) return;
   const attachments = await prisma.designAttachment.findMany({
     where: { designId: id },
     select: { path: true },
@@ -469,11 +480,14 @@ export async function addDesignAttachment(fd: FormData) {
 }
 
 export async function deleteDesignAttachment(fd: FormData) {
-  await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const attachment = await prisma.designAttachment.findUnique({ where: { id } });
-  if (!attachment) return;
+  const attachment = await prisma.designAttachment.findUnique({
+    where: { id },
+    include: { design: { select: { flowId: true } } },
+  });
+  if (!attachment || !(await canManageFlow(actor, attachment.design.flowId))) return;
   await prisma.designAttachment.delete({ where: { id } });
   await deleteAttachment(attachment.path).catch(() => {});
   revalidateAll();
@@ -516,6 +530,7 @@ export async function updateTicket(fd: FormData) {
   const id = s(fd, "id");
   if (!id) return;
   const prev = await prisma.ticket.findUnique({ where: { id } });
+  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
   const status = s(fd, "status") || "todo";
   const linearUrl = s(fd, "linearUrl");
   const flowId = s(fd, "flowId") || null;
@@ -557,9 +572,15 @@ export async function setTicketStatus(fd: FormData) {
 }
 
 export async function deleteTicket(fd: FormData) {
-  await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
-  if (id) await prisma.ticket.delete({ where: { id } });
+  if (!id) return;
+  const ticket = await prisma.ticket.findUnique({
+    where: { id },
+    select: { flowId: true, assigneeId: true },
+  });
+  if (!ticket || !(await canManageFlow(actor, ticket.flowId, ticket.assigneeId))) return;
+  await prisma.ticket.delete({ where: { id } });
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
 }
@@ -572,6 +593,7 @@ export async function updateTicketDetails(fd: FormData) {
   const id = s(fd, "id");
   if (!id) return;
   const prev = await prisma.ticket.findUnique({ where: { id } });
+  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
   const status = s(fd, "status") || "todo";
   const linearUrl = s(fd, "linearUrl");
   await prisma.ticket.update({
@@ -597,9 +619,15 @@ export async function updateTicketDetails(fd: FormData) {
 }
 
 export async function deleteTicketAndRedirect(fd: FormData) {
-  await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
-  if (id) await prisma.ticket.delete({ where: { id } });
+  if (!id) return;
+  const ticket = await prisma.ticket.findUnique({
+    where: { id },
+    select: { flowId: true, assigneeId: true },
+  });
+  if (!ticket || !(await canManageFlow(actor, ticket.flowId, ticket.assigneeId))) return;
+  await prisma.ticket.delete({ where: { id } });
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
   redirect("/manage/tickets");

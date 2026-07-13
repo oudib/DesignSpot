@@ -23,9 +23,11 @@ type Design = {
 export default function FlowDesignsPanel({
   designs,
   color,
+  canManage,
 }: {
   designs: Design[];
   color: string;
+  canManage: boolean;
 }) {
   if (designs.length === 0) {
     return (
@@ -42,7 +44,13 @@ export default function FlowDesignsPanel({
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {designs.map((design, i) => (
-        <DesignCard key={design.id} design={design} color={color} index={i} />
+        <DesignCard
+          key={design.id}
+          design={design}
+          color={color}
+          index={i}
+          canManage={canManage}
+        />
       ))}
     </div>
   );
@@ -52,14 +60,16 @@ function DesignCard({
   design,
   color,
   index,
+  canManage,
 }: {
   design: Design;
   color: string;
   index: number;
+  canManage: boolean;
 }) {
   const [editing, setEditing] = useState(false);
 
-  if (editing) {
+  if (editing && canManage) {
     return (
       <form
         action={updateDesign}
@@ -152,33 +162,37 @@ function DesignCard({
               Open ↗
             </a>
           )}
-          <button
-            type="button"
-            onClick={() => setEditing(true)}
-            className="font-medium text-slate-500 hover:text-brand-600"
-          >
-            Edit
-          </button>
-          <form
-            action={deleteDesign}
-            onSubmit={(e) => {
-              if (
-                !confirm(
-                  `Delete "${design.title}"? This also removes its attachments.`
-                )
-              ) {
-                e.preventDefault();
-              }
-            }}
-          >
-            <input type="hidden" name="id" value={design.id} />
-            <button
-              type="submit"
-              className="font-medium text-slate-500 hover:text-red-600"
-            >
-              Delete
-            </button>
-          </form>
+          {canManage && (
+            <>
+              <button
+                type="button"
+                onClick={() => setEditing(true)}
+                className="font-medium text-slate-500 hover:text-brand-600"
+              >
+                Edit
+              </button>
+              <form
+                action={deleteDesign}
+                onSubmit={(e) => {
+                  if (
+                    !confirm(
+                      `Delete "${design.title}"? This also removes its attachments.`
+                    )
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+              >
+                <input type="hidden" name="id" value={design.id} />
+                <button
+                  type="submit"
+                  className="font-medium text-slate-500 hover:text-red-600"
+                >
+                  Delete
+                </button>
+              </form>
+            </>
+          )}
         </div>
       </div>
 

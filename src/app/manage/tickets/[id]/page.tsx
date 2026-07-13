@@ -7,6 +7,7 @@ import {
   addComment,
   deleteComment,
 } from "@/app/manage/actions";
+import { currentActor, canManageFlow } from "@/lib/access";
 import {
   TICKET_STATUSES,
   TICKET_PRIORITIES,
@@ -66,6 +67,9 @@ export default async function TicketDetailPage({
 
   if (!ticket) notFound();
 
+  const actor = await currentActor();
+  const canManage = await canManageFlow(actor, ticket.flowId, ticket.assigneeId);
+
   const sm = statusMeta(ticket.status);
   const pm = priorityMeta(ticket.priority);
   const ticketLite = {
@@ -120,91 +124,119 @@ export default async function TicketDetailPage({
           {/* Edit */}
           <div className="card p-5">
             <h2 className="font-bold">Details</h2>
-            <form action={updateTicketDetails} className="mt-4 space-y-4">
-              <input type="hidden" name="id" value={ticket.id} />
-              <div>
-                <label className="label">Title</label>
-                <input
-                  name="title"
-                  required
-                  defaultValue={ticket.title}
-                  className="input"
-                />
-              </div>
-              <div>
-                <label className="label">Description</label>
-                <textarea
-                  name="description"
-                  rows={4}
-                  defaultValue={ticket.description}
-                  className="input"
-                  placeholder="Context, acceptance criteria…"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+            {canManage ? (
+              <form action={updateTicketDetails} className="mt-4 space-y-4">
+                <input type="hidden" name="id" value={ticket.id} />
                 <div>
-                  <label className="label">Status</label>
+                  <label className="label">Title</label>
+                  <input
+                    name="title"
+                    required
+                    defaultValue={ticket.title}
+                    className="input"
+                  />
+                </div>
+                <div>
+                  <label className="label">Description</label>
+                  <textarea
+                    name="description"
+                    rows={4}
+                    defaultValue={ticket.description}
+                    className="input"
+                    placeholder="Context, acceptance criteria…"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="label">Status</label>
+                    <select
+                      name="status"
+                      defaultValue={ticket.status}
+                      className="input"
+                    >
+                      {TICKET_STATUSES.map((s) => (
+                        <option key={s.value} value={s.value}>
+                          {s.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Priority</label>
+                    <select
+                      name="priority"
+                      defaultValue={ticket.priority}
+                      className="input"
+                    >
+                      {TICKET_PRIORITIES.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="label">Assignee</label>
                   <select
-                    name="status"
-                    defaultValue={ticket.status}
+                    name="assigneeId"
+                    defaultValue={ticket.assigneeId ?? ""}
                     className="input"
                   >
-                    {TICKET_STATUSES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label}
+                    <option value="">Unassigned</option>
+                    {users.map((u) => (
+                      <option key={u.id} value={u.id}>
+                        {u.name}
                       </option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="label">Priority</label>
-                  <select
-                    name="priority"
-                    defaultValue={ticket.priority}
+                  <label className="label">Linear ticket URL</label>
+                  <input
+                    name="linearUrl"
+                    type="url"
+                    defaultValue={ticket.linearUrl}
                     className="input"
-                  >
-                    {TICKET_PRIORITIES.map((p) => (
-                      <option key={p.value} value={p.value}>
-                        {p.label}
-                      </option>
-                    ))}
-                  </select>
+                    placeholder="https://linear.app/sobrus/issue/…"
+                  />
                 </div>
+                <div className="flex justify-end">
+                  <button type="submit" className="btn-primary">
+                    Save changes
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <div className="mt-4 space-y-3.5 text-sm">
+                <Row label="Description">
+                  <span className="max-w-xs text-right text-slate-600">
+                    {ticket.description || "—"}
+                  </span>
+                </Row>
+                <Row label="Status">
+                  <span className={`badge ${sm.color}`}>{sm.label}</span>
+                </Row>
+                <Row label="Priority">
+                  <span className={`badge ${pm.color}`}>{pm.label}</span>
+                </Row>
+                <Row label="Assignee">
+                  <span className="text-slate-600">
+                    {ticket.assignee?.name ?? "Unassigned"}
+                  </span>
+                </Row>
+                <p className="pt-1 text-xs text-slate-400">
+                  Only {ticket.assignee ? "the assigned designer" : "a flow designer"} or an admin can edit this ticket.
+                </p>
               </div>
-              <div>
-                <label className="label">Assignee</label>
-                <select
-                  name="assigneeId"
-                  defaultValue={ticket.assigneeId ?? ""}
-                  className="input"
-                >
-                  <option value="">Unassigned</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="label">Linear ticket URL</label>
-                <input
-                  name="linearUrl"
-                  type="url"
-                  defaultValue={ticket.linearUrl}
-                  className="input"
-                  placeholder="https://linear.app/sobrus/issue/…"
-                />
-              </div>
-              <div className="flex justify-end">
-                <button type="submit" className="btn-primary">
-                  Save changes
-                </button>
-              </div>
-            </form>
+            )}
           </div>
 
-          <DeliverablesCard ticket={ticketLite} designs={ticket.designs} />
+          <DeliverablesCard
+            ticket={ticketLite}
+            designs={ticket.designs}
+            canManage={canManage}
+          />
 
           {/* Comments */}
           <div className="card p-5">
@@ -329,12 +361,14 @@ export default async function TicketDetailPage({
             </dl>
           </div>
 
-          <form action={deleteTicketAndRedirect}>
-            <input type="hidden" name="id" value={ticket.id} />
-            <button type="submit" className="btn-danger w-full">
-              Delete ticket
-            </button>
-          </form>
+          {canManage && (
+            <form action={deleteTicketAndRedirect}>
+              <input type="hidden" name="id" value={ticket.id} />
+              <button type="submit" className="btn-danger w-full">
+                Delete ticket
+              </button>
+            </form>
+          )}
         </aside>
       </div>
     </div>

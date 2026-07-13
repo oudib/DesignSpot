@@ -32,6 +32,7 @@ type Ticket = {
   flowId: string | null;
   flowName: string | null;
   updatedAt: string;
+  canManage: boolean;
 };
 type Option = { id: string; name: string };
 
@@ -462,12 +463,14 @@ function TicketCard({
               Linear ↗
             </a>
           )}
-          <button
-            onClick={onEdit}
-            className="text-[11px] font-semibold text-slate-500 hover:text-brand-600"
-          >
-            Edit
-          </button>
+          {ticket.canManage && (
+            <button
+              onClick={onEdit}
+              className="text-[11px] font-semibold text-slate-500 hover:text-brand-600"
+            >
+              Edit
+            </button>
+          )}
         </div>
       </div>
     </div>
