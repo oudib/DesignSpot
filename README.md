@@ -24,6 +24,7 @@ Supabase (Postgres) · cookie-based auth (jose + bcrypt) · Server Actions.
 
 ```bash
 npm install
+npx playwright install chromium  # needed once, for the "Download Assets" preview feature
 npm run setup     # prisma generate + db push + seed (creates tables in Supabase)
 npm run dev       # http://localhost:3000
 ```
@@ -65,3 +66,8 @@ User             — designer accounts
 - Add more users via Prisma Studio (`npx prisma studio`) or extend the seed.
 - Optional: use `prisma migrate dev` / `prisma migrate deploy` instead of
   `db push` once the schema stabilises, for versioned migrations.
+- The "Download Assets" preview feature renders HTML exports in headless
+  Chromium (`@sparticuz/chromium` + `playwright-core`, auto-selected on
+  Vercel/Lambda). Give its function enough memory (1024 MB+) and duration —
+  the route sets `maxDuration = 45`, but your plan's function timeout must
+  allow that too.

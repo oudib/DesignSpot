@@ -3,7 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { fetchAttachment } from "@/lib/storage";
-import { extractAssets } from "@/lib/extractAssets";
+import { extractAssets } from "@/lib/renderAssets";
+
+// Rendering can take a while for heavier exports; keep this well under a
+// typical serverless function limit so a slow render fails cleanly.
+export const maxDuration = 45;
 
 // Zips every inline SVG icon and image referenced by a standalone HTML
 // export, for the preview page's "Download Assets" button.
