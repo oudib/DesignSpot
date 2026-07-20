@@ -13,10 +13,15 @@
 
 const LINEAR_API = "https://api.linear.app/graphql";
 
+/** Prefixes a relative app path with APP_BASE_URL, or returns it unchanged if unset. */
+export function absoluteUrl(path: string): string {
+  const base = (process.env.APP_BASE_URL || "").replace(/\/+$/, "");
+  return base ? `${base}${path}` : path;
+}
+
 /** Public URL of a flow's page. Falls back to a relative path if no base set. */
 export function flowUrl(flowId: string): string {
-  const base = (process.env.APP_BASE_URL || "").replace(/\/+$/, "");
-  return base ? `${base}/flows/${flowId}` : `/flows/${flowId}`;
+  return absoluteUrl(`/flows/${flowId}`);
 }
 
 // Only "done" gets a Linear comment — intermediate status changes (todo,

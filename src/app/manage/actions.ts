@@ -12,10 +12,12 @@ import {
   getLinearIssue,
   flowUrl,
   statusMessage,
+  absoluteUrl,
 } from "@/lib/linear";
 import { buildDesignPrompt } from "@/lib/designPrompt";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { uploadAttachment, deleteAttachment, attachmentKind } from "@/lib/storage";
+import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
 
 /* ------------------------- Linear sync helpers ------------------------ */
 // Each designer connects their own Linear, so every push uses the ACTING
@@ -403,9 +405,13 @@ export async function createDesign(fd: FormData) {
         select: { id: true, linearUrl: true },
       });
       const label = variant ? `${title} (${variant})` : title;
+      // In-app preview page for the uploaded delivery file, if any.
+      const previewUrl = attachmentUrl ? absoluteUrl(attachmentPreviewUrl(attachmentUrl)) : "";
       for (const t of tickets) {
         const lines: string[] = [];
-        if (sharedUrl) lines.push(`🎨 New design added: **${label}**\n${sharedUrl}`);
+        if (sharedUrl) lines.push(`🎨 New design added: **${label}**`);
+        if (previewUrl) lines.push(`Design Preview :\n${previewUrl}`);
+        if (linkUrl) lines.push(`Claude design url:\n${linkUrl}`);
         // Fallback so the delivery is still reachable if the app itself is down.
         if (attachmentDriveUrl) lines.push(`📁 Google Drive backup: ${attachmentDriveUrl}`);
         if (markDone && t.id === ticketId) lines.push("✅ Design completed.");
