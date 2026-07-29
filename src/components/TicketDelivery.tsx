@@ -14,7 +14,7 @@ import DeliveryDialog from "@/components/DeliveryDialog";
 import Spinner from "@/components/Spinner";
 import ActionForm, { useActionToast } from "@/components/ActionForm";
 import SubmitButton from "@/components/SubmitButton";
-import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
+import { attachmentPreviewUrl, attachmentDriveUrl } from "@/lib/attachmentUrl";
 
 type TicketLite = {
   id: string;
@@ -39,6 +39,7 @@ type DesignWithAttachments = {
   title: string;
   variant: string;
   claudeUrl: string;
+  createdAt: Date | string;
   attachments: Attachment[];
 };
 
@@ -126,13 +127,26 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
   );
 }
 
+/** The design link can be a Claude share link or a Google Drive one. */
+function externalLinkLabel(url: string) {
+  return url.includes("drive.google.com") ? "Google Drive" : "Claude design";
+}
+
+function fmtDate(d: Date | string) {
+  return new Date(d).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 /**
- * One deliverable file: its newest version, with the version count, and (for
- * the people responsible) an inline "New version" upload. Re-uploading here
- * keeps the preview link that was already shared in Linear — it starts serving
- * the new design instead of the old one.
+ * One deliverable file — its newest version — as a card with real buttons:
+ * open the preview, download it, jump to Drive, or upload a redesign. A
+ * revision keeps the preview link already shared in Linear, so that link
+ * starts serving the new design instead of the old one.
  */
-function AttachmentRow({
+function DeliverableFile({
   attachment: att,
   versionCount,
   canManage,
@@ -142,43 +156,69 @@ function AttachmentRow({
   canManage: boolean;
 }) {
   const [uploading, setUploading] = useState(false);
+  const isHtml = att.kind === "html";
 
   return (
-    <li>
-      <div className="flex items-center justify-between gap-2">
+    <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+      <div className="flex items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-lg text-brand-600 ring-1 ring-inset ring-slate-200">
+          {isHtml ? "◈" : "📎"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-800">
+            {att.name}
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-slate-400">
+            <span>{fmtSize(att.size)}</span>
+            {isHtml && (
+              <span className="badge bg-brand-50 text-brand-700">
+                standalone HTML
+              </span>
+            )}
+            {versionCount > 1 && (
+              <span className="badge bg-emerald-50 text-emerald-700">
+                v{att.version} · {versionCount} versions
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <a
-          href={
-            att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url
-          }
+          href={isHtml ? attachmentPreviewUrl(att.url) : att.url}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex min-w-0 items-center gap-1.5 text-slate-500 hover:text-brand-600"
+          className="btn-primary"
         >
-          <span>{att.kind === "html" ? "◈" : "📎"}</span>
-          <span className="truncate">{att.name}</span>
-          <span className="shrink-0 text-xs text-slate-400">
-            {fmtSize(att.size)}
-          </span>
-          {versionCount > 1 && (
-            <span className="badge shrink-0 bg-brand-50 text-brand-700">
-              v{att.version}
-            </span>
-          )}
-          {att.kind === "html" && (
-            <span className="badge bg-brand-50 text-brand-700">
-              standalone HTML
-            </span>
-          )}
+          <span>{isHtml ? "◈" : "↗"}</span>
+          {isHtml ? "Open preview" : "Open file"}
+        </a>
+        <a
+          href={`${att.url}?download=1`}
+          download={att.name}
+          className="btn-secondary"
+        >
+          <span>⬇</span> Download
+        </a>
+        <a
+          href={attachmentDriveUrl(att.url)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-secondary"
+          title="Open the file in Google Drive"
+        >
+          <span>📁</span> Drive
         </a>
         {canManage && (
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="ml-auto flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={() => setUploading((o) => !o)}
-              className="text-xs font-medium text-slate-400 hover:text-brand-600"
+              className="btn-secondary"
               title="Upload a redesign — the preview link already shared in Linear will show it"
             >
-              New version
+              <span className="text-brand-600">⇧</span> New version
             </button>
             <ActionForm
               action={deleteDesignAttachment}
@@ -192,10 +232,11 @@ function AttachmentRow({
             >
               <input type="hidden" name="id" value={att.id} />
               <SubmitButton
-                className="shrink-0 text-slate-400 hover:text-red-600 disabled:opacity-60"
+                className="btn-danger"
+                pendingLabel="Removing…"
                 aria-label={`Remove ${att.name}`}
               >
-                ✕
+                Remove
               </SubmitButton>
             </ActionForm>
           </div>
@@ -208,29 +249,185 @@ function AttachmentRow({
           success={`Uploaded as v${att.version + 1} — the shared preview link now shows it.`}
           error="The upload failed. Check the file and try again."
           onDone={() => setUploading(false)}
-          className="mt-1.5 flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50/40 p-2"
+          className="mt-3 rounded-xl border border-brand-200 bg-white p-3"
         >
           <input type="hidden" name="attachmentId" value={att.id} />
-          <input
-            type="file"
-            name="file"
-            required
-            className="min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-white file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-100"
-          />
-          <SubmitButton
-            className="btn-primary btn-sm shrink-0"
-            pendingLabel="Uploading…"
-          >
-            Upload v{att.version + 1}
-          </SubmitButton>
-          <button
-            type="button"
-            onClick={() => setUploading(false)}
-            className="btn-secondary btn-sm shrink-0"
-          >
-            Cancel
-          </button>
+          <p className="text-xs text-slate-500">
+            Pick the redesigned file. It becomes{" "}
+            <span className="font-semibold text-slate-700">
+              v{att.version + 1}
+            </span>{" "}
+            and the preview link already shared in Linear will show it.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input
+              type="file"
+              name="file"
+              required
+              className="min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-600 hover:file:bg-slate-200"
+            />
+            <SubmitButton className="btn-primary" pendingLabel="Uploading…">
+              Upload v{att.version + 1}
+            </SubmitButton>
+            <button
+              type="button"
+              onClick={() => setUploading(false)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+          </div>
         </ActionForm>
+      )}
+    </div>
+  );
+}
+
+/** One delivery: its title, its external design link, and its files. */
+function DeliverableCard({
+  design: d,
+  canManage,
+}: {
+  design: DesignWithAttachments;
+  canManage: boolean;
+}) {
+  const [editing, setEditing] = useState(false);
+  const files = groupRevisions(d.attachments);
+
+  if (editing && canManage) {
+    return (
+      <li>
+        <ActionForm
+          action={updateDesign}
+          success="Delivery updated."
+          error="Couldn't update the delivery. Please try again."
+          onDone={() => setEditing(false)}
+          className="space-y-3 rounded-2xl border border-brand-200 bg-brand-50/30 p-4"
+        >
+          <input type="hidden" name="id" value={d.id} />
+          <div>
+            <label className="label">Title</label>
+            <input
+              name="title"
+              defaultValue={d.title}
+              required
+              className="input"
+              placeholder="Title"
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <label className="label">Variant</label>
+              <input
+                name="variant"
+                defaultValue={d.variant}
+                className="input"
+                placeholder="e.g. v2, dark mode"
+              />
+            </div>
+            <div>
+              <label className="label">Design link</label>
+              <input
+                name="claudeUrl"
+                type="url"
+                defaultValue={d.claudeUrl}
+                className="input"
+                placeholder="https://claude.ai/… (optional)"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="btn-secondary"
+            >
+              Cancel
+            </button>
+            <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
+          </div>
+        </ActionForm>
+      </li>
+    );
+  }
+
+  return (
+    <li className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-lg text-brand-600">
+            ◑
+          </span>
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-slate-800">{d.title}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-slate-400">
+              {d.variant && (
+                <span className="badge bg-slate-100 text-slate-600">
+                  {d.variant}
+                </span>
+              )}
+              <span>
+                {files.length > 0
+                  ? `${files.length} file${files.length === 1 ? "" : "s"}`
+                  : "Link only"}
+              </span>
+              <span>Delivered {fmtDate(d.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="btn-secondary btn-sm"
+            >
+              Edit
+            </button>
+            <ActionForm
+              action={deleteDesign}
+              confirm={`Delete "${d.title}"? This also removes its attachments.`}
+              success="Delivery deleted."
+              error="Couldn't delete the delivery. Please try again."
+            >
+              <input type="hidden" name="id" value={d.id} />
+              <SubmitButton
+                className="btn-danger btn-sm"
+                pendingLabel="Deleting…"
+                aria-label={`Delete ${d.title}`}
+              >
+                Delete
+              </SubmitButton>
+            </ActionForm>
+          </div>
+        )}
+      </div>
+
+      {d.claudeUrl && (
+        <a
+          href={d.claudeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="btn-secondary mt-3"
+        >
+          <span className="text-brand-600">🔗</span>{" "}
+          {externalLinkLabel(d.claudeUrl)} ↗
+        </a>
+      )}
+
+      {files.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {/* Newest version of each file — older revisions live behind the
+              preview page's version picker. */}
+          {files.map(({ latest, versions }) => (
+            <DeliverableFile
+              key={latest.id}
+              attachment={latest}
+              versionCount={versions.length}
+              canManage={canManage}
+            />
+          ))}
+        </div>
       )}
     </li>
   );
@@ -247,14 +444,13 @@ export function DeliverablesCard({
 }) {
   const router = useRouter();
   const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
 
   return (
     <div className="card p-5">
-      <div className="flex items-center justify-between">
-        <h2 className="font-bold">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="flex items-center gap-2 font-bold">
           Deliverables
-          <span className="ml-2 text-sm font-normal text-slate-400">
+          <span className="badge bg-slate-100 text-slate-500">
             {designs.length}
           </span>
         </h2>
@@ -262,136 +458,39 @@ export function DeliverablesCard({
           <button
             type="button"
             onClick={() => setAdding(true)}
-            className="text-xs font-medium text-brand-600 hover:underline"
+            className="btn-secondary btn-sm"
           >
-            + Add delivery
+            <span className="text-brand-600">＋</span> Add delivery
           </button>
         )}
       </div>
 
       {designs.length === 0 ? (
-        <p className="mt-3 text-sm text-slate-400">
-          {ticket.flowId
-            ? "No files or links delivered yet."
-            : "Attach this ticket to a flow (from the tickets board) to deliver files here."}
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-3">
-          {designs.map((d) =>
-            editingId === d.id ? (
-              <li key={d.id}>
-                <ActionForm
-                  action={updateDesign}
-                  success="Delivery updated."
-                  error="Couldn't update the delivery. Please try again."
-                  onDone={() => setEditingId(null)}
-                  className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/30 p-3"
-                >
-                  <input type="hidden" name="id" value={d.id} />
-                  <input
-                    name="title"
-                    defaultValue={d.title}
-                    required
-                    className="input py-1 text-sm"
-                    placeholder="Title"
-                  />
-                  <div className="flex gap-2">
-                    <input
-                      name="variant"
-                      defaultValue={d.variant}
-                      className="input py-1 text-sm"
-                      placeholder="Variant (optional)"
-                    />
-                    <input
-                      name="claudeUrl"
-                      type="url"
-                      defaultValue={d.claudeUrl}
-                      className="input py-1 text-sm"
-                      placeholder="https://claude.ai/… (optional)"
-                    />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setEditingId(null)}
-                      className="btn-secondary btn-sm"
-                    >
-                      Cancel
-                    </button>
-                    <SubmitButton
-                      className="btn-primary btn-sm"
-                      pendingLabel="Saving…"
-                    >
-                      Save
-                    </SubmitButton>
-                  </div>
-                </ActionForm>
-              </li>
-            ) : (
-              <li key={d.id} className="space-y-1.5 text-sm">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-1.5 text-slate-600">
-                    <span>{d.claudeUrl ? "🔗" : "◑"}</span>
-                    {d.claudeUrl ? (
-                      <a
-                        href={d.claudeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="truncate hover:text-brand-600"
-                      >
-                        {d.title}
-                        {d.variant && ` (${d.variant})`}
-                      </a>
-                    ) : (
-                      <span className="truncate">
-                        {d.title}
-                        {d.variant && ` (${d.variant})`}
-                      </span>
-                    )}
-                  </div>
-                  {canManage && (
-                    <div className="flex shrink-0 items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setEditingId(d.id)}
-                        className="text-xs font-medium text-slate-400 hover:text-brand-600"
-                      >
-                        Edit
-                      </button>
-                      <ActionForm
-                        action={deleteDesign}
-                        confirm={`Delete "${d.title}"? This also removes its attachments.`}
-                        success="Delivery deleted."
-                        error="Couldn't delete the delivery. Please try again."
-                      >
-                        <input type="hidden" name="id" value={d.id} />
-                        <SubmitButton
-                          className="text-slate-400 hover:text-red-600 disabled:opacity-60"
-                          aria-label={`Delete ${d.title}`}
-                        >
-                          ✕
-                        </SubmitButton>
-                      </ActionForm>
-                    </div>
-                  )}
-                </div>
-                {d.attachments.length > 0 && (
-                  <ul className="ml-5 space-y-1">
-                    {/* One row per deliverable file — its newest version. Older
-                        revisions stay reachable from the preview page. */}
-                    {groupRevisions(d.attachments).map(({ latest, versions }) => (
-                      <AttachmentRow
-                        key={latest.id}
-                        attachment={latest}
-                        versionCount={versions.length}
-                        canManage={canManage}
-                      />
-                    ))}
-                  </ul>
-                )}
-              </li>
-            ),
+        <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-slate-50/60 px-6 py-8 text-center">
+          <p className="text-2xl text-slate-300">◑</p>
+          <p className="mt-2 text-sm font-semibold text-slate-600">
+            Nothing delivered yet
+          </p>
+          <p className="mx-auto mt-1 max-w-xs text-xs text-slate-400">
+            {ticket.flowId
+              ? "Attach the final HTML export or a design link — it shows up here and gets pushed to any linked Linear issue."
+              : "Attach this ticket to a flow (from the tickets board) to deliver files here."}
+          </p>
+          {ticket.flowId && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="btn-primary mt-4"
+            >
+              <span>＋</span> Add delivery
+            </button>
           )}
+        </div>
+      ) : (
+        <ul className="mt-4 space-y-3">
+          {designs.map((d) => (
+            <DeliverableCard key={d.id} design={d} canManage={canManage} />
+          ))}
         </ul>
       )}
 
