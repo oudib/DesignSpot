@@ -1,12 +1,15 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef } from "react";
 import {
   connectLinear,
   disconnectLinear,
   type ConnectResult,
 } from "@/app/manage/actions";
 import Spinner from "@/components/Spinner";
+import ActionForm from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
+import { useToast } from "@/components/Toast";
 
 export default function LinearSettings({
   connected,
@@ -20,6 +23,17 @@ export default function LinearSettings({
     connectLinear,
     null
   );
+
+  // connectLinear reports through its action state; mirror each new result as a
+  // toast so the outcome is visible even if the form has scrolled out of view.
+  const toast = useToast();
+  const announced = useRef<ConnectResult | null>(null);
+  useEffect(() => {
+    if (!state || announced.current === state) return;
+    announced.current = state;
+    if (state.ok) toast.success(state.message);
+    else toast.error(state.message);
+  }, [state, toast]);
 
   return (
     <div className="card p-6">
@@ -49,11 +63,19 @@ export default function LinearSettings({
               ? `Connected as ${viewerLabel}.`
               : "A key is saved, but it no longer works — reconnect with a fresh key below."}
           </p>
-          <form action={disconnectLinear}>
-            <button type="submit" className="btn-secondary btn-sm">
+          <ActionForm
+            action={disconnectLinear}
+            confirm="Disconnect your Linear account? Comments will stop being posted as you."
+            success="Linear disconnected."
+            error="Couldn't disconnect Linear. Please try again."
+          >
+            <SubmitButton
+              className="btn-secondary btn-sm"
+              pendingLabel="Disconnecting…"
+            >
               Disconnect
-            </button>
-          </form>
+            </SubmitButton>
+          </ActionForm>
 
           <details className="text-sm">
             <summary className="cursor-pointer text-slate-500">

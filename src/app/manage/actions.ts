@@ -485,6 +485,70 @@ export async function addDesignAttachment(fd: FormData) {
   revalidateAll();
 }
 
+/**
+ * Upload a redesign as the next version of an existing attachment instead of a
+ * new, unrelated file. The chain's first version keeps its Drive id, so the
+ * `/preview/{driveId}` link already shared in Linear comments now renders this
+ * new version — reviewers don't need a new link.
+ */
+export async function addDesignRevision(fd: FormData) {
+  const actor = await requireAuth();
+  const attachmentId = s(fd, "attachmentId");
+  const file = fd.get("file");
+  if (!attachmentId || !(file instanceof File) || file.size === 0) return;
+
+  const current = await prisma.designAttachment.findUnique({
+    where: { id: attachmentId },
+    include: { design: { select: { id: true, title: true, flowId: true } } },
+  });
+  if (!current || !(await canManageFlow(actor, current.design.flowId))) return;
+
+  // Versions are numbered per chain, so pick up from whatever is highest —
+  // the button may have been clicked on an older version of the chain.
+  const rootId = current.rootId ?? current.id;
+  const chain = await prisma.designAttachment.findMany({
+    where: { OR: [{ id: rootId }, { rootId }] },
+    orderBy: { version: "asc" },
+  });
+  const root = chain.find((a) => a.id === rootId) ?? current;
+  const nextVersion = Math.max(...chain.map((a) => a.version), 1) + 1;
+
+  const { path, url, driveUrl } = await uploadAttachment(current.design.id, file);
+  await prisma.designAttachment.create({
+    data: {
+      designId: current.design.id,
+      name: file.name,
+      url,
+      path,
+      mimeType: file.type || "application/octet-stream",
+      size: file.size,
+      kind: attachmentKind(file.name, file.type),
+      rootId,
+      version: nextVersion,
+    },
+  });
+
+  // Ping every Linear issue tied to this flow with the *stable* link (the first
+  // version's preview URL) — the same one they were originally given.
+  const key = await actingLinearKey(actor.userId);
+  if (key) {
+    const tickets = await prisma.ticket.findMany({
+      where: { flowId: current.design.flowId, NOT: { linearUrl: "" } },
+      select: { linearUrl: true },
+    });
+    const previewUrl = absoluteUrl(attachmentPreviewUrl(root.url));
+    const lines = [
+      `🔁 Design updated to v${nextVersion}: **${current.design.title}**`,
+      `Design Preview (same link, now showing v${nextVersion}) :\n${previewUrl}`,
+      `📁 Google Drive backup: ${driveUrl}`,
+    ];
+    for (const t of tickets) {
+      await postLinearComment(key, t.linearUrl, lines.join("\n"));
+    }
+  }
+  revalidateAll();
+}
+
 export async function deleteDesignAttachment(fd: FormData) {
   const actor = await requireAuth();
   const id = s(fd, "id");
@@ -494,8 +558,19 @@ export async function deleteDesignAttachment(fd: FormData) {
     include: { design: { select: { flowId: true } } },
   });
   if (!attachment || !(await canManageFlow(actor, attachment.design.flowId))) return;
-  await prisma.designAttachment.delete({ where: { id } });
-  await deleteAttachment(attachment.path).catch(() => {});
+
+  // Removing a deliverable removes every version of it — the UI only ever shows
+  // the newest one, so leaving older revisions (and their Drive files) behind
+  // would just orphan them.
+  const rootId = attachment.rootId ?? attachment.id;
+  const chain = await prisma.designAttachment.findMany({
+    where: { OR: [{ id: rootId }, { rootId }] },
+    select: { id: true, path: true },
+  });
+  await prisma.designAttachment.deleteMany({
+    where: { id: { in: chain.map((a) => a.id) } },
+  });
+  await Promise.all(chain.map((a) => deleteAttachment(a.path).catch(() => {})));
   revalidateAll();
 }
 

@@ -17,6 +17,8 @@ import {
 import HierarchyPicker, { type SolLite } from "@/components/HierarchyPicker";
 import DeliveryDialog from "@/components/DeliveryDialog";
 import Spinner from "@/components/Spinner";
+import ActionForm, { useActionToast } from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
 
 type Ticket = {
   id: string;
@@ -80,14 +82,21 @@ export default function TicketsClient({
   const [designPrompt, setDesignPrompt] = useState<Ticket | null>(null);
   const [isPending, startTransition] = useTransition();
   const [view, setView] = useState<"board" | "history">("board");
+  const { run } = useActionToast();
 
   function setStatus(id: string, status: string) {
+    const previous = board.find((t) => t.id === id)?.status;
     setStatusLocal(id, status);
     const fd = new FormData();
     fd.set("id", id);
     fd.set("status", status);
-    startTransition(() => {
-      setTicketStatus(fd);
+    startTransition(async () => {
+      await run(() => setTicketStatus(fd), {
+        success: `Moved to ${statusMeta(status).label}.`,
+        error: "Couldn't move the ticket. Please try again.",
+        // Put the card back where it came from if the server refused.
+        onError: () => previous && setStatusLocal(id, previous),
+      });
     });
   }
 
@@ -493,14 +502,23 @@ function TicketDialog({
   const isEdit = !!ticket;
   // New tickets default to the current user (the creator); editable here.
   const defaultAssignee = ticket?.assigneeId ?? currentUserId ?? "";
+  const { run } = useActionToast();
+  const [deleting, setDeleting] = useState(false);
 
-  const handleSave = async (fd: FormData) => {
-    await (isEdit ? updateTicket : createTicket)(fd);
-    onClose();
-  };
-  const handleDelete = async (fd: FormData) => {
-    await deleteTicket(fd);
-    onClose();
+  // Delete is a plain button, not a second submit: as the first submit button
+  // in the form it would otherwise be what the Enter key triggers.
+  const handleDelete = async () => {
+    if (!ticket) return;
+    const fd = new FormData();
+    fd.set("id", ticket.id);
+    setDeleting(true);
+    const { ok } = await run(() => deleteTicket(fd), {
+      confirm: `Delete "${ticket.title}"? This can't be undone.`,
+      success: "Ticket deleted.",
+      error: "Couldn't delete the ticket. Please try again.",
+    });
+    setDeleting(false);
+    if (ok) onClose();
   };
 
   return (
@@ -516,7 +534,17 @@ function TicketDialog({
           {isEdit ? "Edit ticket" : "New ticket"}
         </h2>
 
-        <form action={handleSave} className="mt-4 space-y-4">
+        <ActionForm
+          action={isEdit ? updateTicket : createTicket}
+          success={isEdit ? "Ticket updated." : "Ticket created."}
+          error={
+            isEdit
+              ? "Couldn't save the ticket. Please try again."
+              : "Couldn't create the ticket. Please try again."
+          }
+          onDone={onClose}
+          className="mt-4 space-y-4"
+        >
           {isEdit && <input type="hidden" name="id" value={ticket.id} />}
 
           <div>
@@ -615,11 +643,13 @@ function TicketDialog({
           <div className="flex items-center justify-between pt-2">
             {isEdit ? (
               <button
-                type="submit"
-                formAction={handleDelete}
+                type="button"
+                onClick={handleDelete}
+                disabled={deleting}
                 className="btn-danger"
               >
-                Delete
+                {deleting && <Spinner />}
+                {deleting ? "Deleting…" : "Delete"}
               </button>
             ) : (
               <span />
@@ -628,12 +658,12 @@ function TicketDialog({
               <button type="button" onClick={onClose} className="btn-secondary">
                 Cancel
               </button>
-              <button type="submit" className="btn-primary">
+              <SubmitButton pendingLabel={isEdit ? "Saving…" : "Creating…"}>
                 {isEdit ? "Save changes" : "Create ticket"}
-              </button>
+              </SubmitButton>
             </div>
           </div>
-        </form>
+        </ActionForm>
       </div>
     </div>
   );

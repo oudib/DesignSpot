@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createDesign } from "@/app/manage/actions";
 import Spinner from "./Spinner";
+import { useToast } from "./Toast";
 
 type DeliveryTicket = {
   id: string;
@@ -29,13 +30,15 @@ export default function DeliveryDialog({
   ticket: DeliveryTicket;
   mode: "complete" | "attach";
   onSaved: () => void;
-  onSkip?: () => void;
+  onSkip?: () => void | Promise<void>;
   onCancel: () => void;
 }) {
   const [pending, setPending] = useState(false);
   const [method, setMethod] = useState<"file" | "drive">("file");
   const [error, setError] = useState("");
   const [markDone, setMarkDone] = useState(false);
+  const [skipping, setSkipping] = useState(false);
+  const toast = useToast();
 
   // Only the "attach" flow (ticket detail page) shows the checkbox —
   // "complete" mode always marks the ticket done regardless.
@@ -44,19 +47,23 @@ export default function DeliveryDialog({
   const handleSave = async (fd: FormData) => {
     setPending(true);
     setError("");
+    // createDesign folds the "done" comment into the same Linear comment
+    // as the delivery when markDone is set, instead of posting two.
+    const alsoDone = mode === "complete" || (showMarkDone && markDone);
     try {
-      // createDesign folds the "done" comment into the same Linear comment
-      // as the delivery when markDone is set, instead of posting two.
-      if (mode === "complete" || (showMarkDone && markDone)) {
-        fd.set("markDone", "1");
-      }
+      if (alsoDone) fd.set("markDone", "1");
       await createDesign(fd);
+      toast.success(
+        alsoDone
+          ? `Design delivered — “${ticket.title}” is done.`
+          : "Design delivered.",
+      );
       onSaved();
     } catch {
-      setError(
-        "The delivery couldn't be saved — check the file or link and try again.",
-      );
-    } finally {
+      const message =
+        "The delivery couldn't be saved — check the file or link and try again.";
+      setError(message);
+      toast.error(message);
       setPending(false);
     }
   };
@@ -212,12 +219,20 @@ export default function DeliveryDialog({
               {onSkip && (
                 <button
                   type="button"
-                  onClick={onSkip}
-                  disabled={pending}
-                  className="text-sm font-medium text-slate-500 hover:text-slate-800"
+                  onClick={async () => {
+                    setSkipping(true);
+                    try {
+                      await onSkip();
+                    } finally {
+                      setSkipping(false);
+                    }
+                  }}
+                  disabled={pending || skipping}
+                  className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 disabled:opacity-60"
                   title="Mark it Done without a delivery"
                 >
-                  Skip
+                  {skipping && <Spinner />}
+                  {skipping ? "Skipping…" : "Skip"}
                 </button>
               )}
               <button type="submit" disabled={pending} className="btn-primary">

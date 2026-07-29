@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { getSession, hasWorkspaceAccess } from "@/lib/auth";
 import { currentRole } from "@/lib/access";
 import { setWorkspaceAccess } from "./actions";
+import ActionForm from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
 
 const ROLE_BADGES: Record<string, { label: string; className: string }> = {
   admin: { label: "Admin", className: "bg-brand-50 text-brand-700" },
@@ -68,15 +70,24 @@ export default async function UsersPage() {
                 })}
               </span>
               {canToggle ? (
-                <form action={setWorkspaceAccess}>
+                <ActionForm
+                  action={setWorkspaceAccess}
+                  success={
+                    hasAccess
+                      ? `Workspace access revoked for ${user.name}.`
+                      : `Workspace access granted to ${user.name}.`
+                  }
+                  error="Couldn't change workspace access. Please try again."
+                >
                   <input type="hidden" name="userId" value={user.id} />
                   <input type="hidden" name="grant" value={hasAccess ? "0" : "1"} />
-                  <button
+                  <SubmitButton
                     className={hasAccess ? "btn-secondary btn-sm" : "btn-primary btn-sm"}
+                    pendingLabel={hasAccess ? "Revoking…" : "Granting…"}
                   >
                     {hasAccess ? "Revoke workspace" : "Grant workspace"}
-                  </button>
-                </form>
+                  </SubmitButton>
+                </ActionForm>
               ) : (
                 <span className="text-xs text-slate-400">
                   {user.role === "admin" ? "Always has access" : ""}

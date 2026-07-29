@@ -3,22 +3,31 @@
 import { useState } from "react";
 import { generateDesignPrompt } from "@/app/manage/actions";
 import Spinner from "./Spinner";
+import { useToast } from "./Toast";
 
 export default function GeneratePromptButton({ ticketId }: { ticketId: string }) {
   const [loading, setLoading] = useState(false);
   const [prompt, setPrompt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   async function handleClick() {
     setLoading(true);
     setError(null);
     try {
       const res = await generateDesignPrompt(ticketId);
-      if ("error" in res) setError(res.error);
-      else setPrompt(res.prompt);
+      if ("error" in res) {
+        setError(res.error);
+        toast.error(res.error);
+      } else {
+        setPrompt(res.prompt);
+        toast.success("Design prompt ready.");
+      }
     } catch {
-      setError("Could not generate the prompt. Please try again.");
+      const message = "Could not generate the prompt. Please try again.";
+      setError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -35,9 +44,11 @@ export default function GeneratePromptButton({ ticketId }: { ticketId: string })
     try {
       await navigator.clipboard.writeText(prompt);
       setCopied(true);
+      toast.success("Prompt copied to your clipboard.");
       setTimeout(() => setCopied(false), 2000);
     } catch {
       // Clipboard blocked — the textarea below is still selectable/copyable.
+      toast.error("Couldn't copy — select the text below and copy it manually.");
     }
   }
 

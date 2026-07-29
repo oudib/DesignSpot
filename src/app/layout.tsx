@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import RouteProgressBar from "@/components/RouteProgressBar";
+import ToastProvider from "@/components/Toast";
 import "./globals.css";
 
 const inter = Inter({
@@ -23,8 +23,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={inter.variable}>
       <body>
-        <RouteProgressBar />
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

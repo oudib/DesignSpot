@@ -3,14 +3,19 @@
 import { useState } from "react";
 import Link from "next/link";
 import { updateDesign, deleteDesign } from "@/app/manage/actions";
+import ActionForm from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
 import { tint } from "@/lib/utils";
 import { attachmentPreviewUrl, attachmentDriveUrl } from "@/lib/attachmentUrl";
+import { groupRevisions } from "@/lib/revisions";
 
 type Attachment = {
   id: string;
   name: string;
   url: string;
   kind: string;
+  version: number;
+  rootId: string | null;
 };
 type Design = {
   id: string;
@@ -71,9 +76,11 @@ function DesignCard({
 
   if (editing && canManage) {
     return (
-      <form
+      <ActionForm
         action={updateDesign}
-        onSubmit={() => setTimeout(() => setEditing(false), 0)}
+        success="Design updated."
+        error="Couldn't update the design. Please try again."
+        onDone={() => setEditing(false)}
         className="animate-rise space-y-2.5 rounded-2xl border border-brand-200 bg-white p-5 shadow-card"
         style={{ animationDelay: `${index * 50}ms` }}
       >
@@ -113,11 +120,11 @@ function DesignCard({
           >
             Cancel
           </button>
-          <button type="submit" className="btn-primary btn-sm">
+          <SubmitButton className="btn-primary btn-sm" pendingLabel="Saving…">
             Save
-          </button>
+          </SubmitButton>
         </div>
-      </form>
+      </ActionForm>
     );
   }
 
@@ -171,26 +178,20 @@ function DesignCard({
               >
                 Edit
               </button>
-              <form
+              <ActionForm
                 action={deleteDesign}
-                onSubmit={(e) => {
-                  if (
-                    !confirm(
-                      `Delete "${design.title}"? This also removes its attachments.`
-                    )
-                  ) {
-                    e.preventDefault();
-                  }
-                }}
+                confirm={`Delete "${design.title}"? This also removes its attachments.`}
+                success="Design deleted."
+                error="Couldn't delete the design. Please try again."
               >
                 <input type="hidden" name="id" value={design.id} />
-                <button
-                  type="submit"
-                  className="font-medium text-slate-500 hover:text-red-600"
+                <SubmitButton
+                  className="inline-flex items-center gap-1.5 font-medium text-slate-500 hover:text-red-600 disabled:opacity-60"
+                  pendingLabel="Deleting…"
                 >
                   Delete
-                </button>
-              </form>
+                </SubmitButton>
+              </ActionForm>
             </>
           )}
         </div>
@@ -198,7 +199,8 @@ function DesignCard({
 
       {design.attachments.length > 0 && (
         <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
-          {design.attachments.map((att) => (
+          {/* Newest version of each file — the preview page holds the history. */}
+          {groupRevisions(design.attachments).map(({ latest: att, versions }) => (
             <li
               key={att.id}
               className="flex items-center justify-between gap-2 text-sm text-slate-600"
@@ -206,6 +208,11 @@ function DesignCard({
               <span className="flex min-w-0 items-center gap-2">
                 <span>{att.kind === "html" ? "◈" : "📎"}</span>
                 <span className="truncate">{att.name}</span>
+                {versions.length > 1 && (
+                  <span className="badge shrink-0 bg-brand-50 text-brand-700">
+                    v{att.version}
+                  </span>
+                )}
               </span>
               <span className="flex shrink-0 items-center gap-1.5">
                 <a

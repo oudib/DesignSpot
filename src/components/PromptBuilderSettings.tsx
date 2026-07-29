@@ -9,6 +9,8 @@ import {
   saveSolutionPromptTemplate,
   resetSolutionPromptTemplate,
 } from "@/app/manage/prompt-builder/actions";
+import ActionForm, { useActionToast } from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
 import { cn } from "@/lib/utils";
 import { PROMPT_PLACEHOLDERS } from "@/lib/designPrompt";
 
@@ -36,6 +38,7 @@ export default function PromptBuilderSettings({
   const router = useRouter();
   const isCustom = customBody !== null;
   const [body, setBody] = useState(customBody ?? defaultTemplate);
+  const { wrap } = useActionToast();
 
   const idField = scope === "solution" ? "solutionId" : "userId";
   const saveAction = scope === "solution" ? saveSolutionPromptTemplate : savePromptTemplate;
@@ -112,7 +115,12 @@ export default function PromptBuilderSettings({
               </span>
             </div>
 
-            <form action={saveAction} className="mt-4 space-y-3">
+            <ActionForm
+              action={saveAction}
+              success="Template saved."
+              error="Couldn't save the template. Please try again."
+              className="mt-4 space-y-3"
+            >
               <input type="hidden" name={idField} value={selectedId} />
               <textarea
                 name="body"
@@ -139,19 +147,30 @@ export default function PromptBuilderSettings({
 
               <div className="flex justify-end gap-2">
                 {isCustom && (
-                  <button
-                    type="submit"
-                    formAction={resetAction}
+                  <SubmitButton
+                    formAction={wrap(resetAction, {
+                      success: "Template reset to the default.",
+                      error: "Couldn't reset the template. Please try again.",
+                      confirm:
+                        "Reset this template? The custom version will be discarded.",
+                      onDone: () => setBody(defaultTemplate),
+                    })}
                     className="btn-secondary btn-sm"
+                    pendingLabel="Resetting…"
+                    spinOnlyWhenClicked
                   >
                     Reset to default
-                  </button>
+                  </SubmitButton>
                 )}
-                <button type="submit" className="btn-primary btn-sm">
+                <SubmitButton
+                  className="btn-primary btn-sm"
+                  pendingLabel="Saving…"
+                  spinOnlyWhenClicked
+                >
                   Save template
-                </button>
+                </SubmitButton>
               </div>
-            </form>
+            </ActionForm>
           </div>
         </>
       )}

@@ -4,6 +4,14 @@ import { createContext, useContext, useState } from "react";
 import * as A from "@/app/manage/actions";
 import { cn, SOLUTION_LANGUAGES, languageMeta } from "@/lib/utils";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
+import { groupRevisions } from "@/lib/revisions";
+import ActionForm from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
+
+/** "module" → "Module", for toast copy built from a label prop. */
+function cap(label: string) {
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
 
 /* ----------------------------- Types ---------------------------- */
 type DesignAttachment = {
@@ -13,6 +21,8 @@ type DesignAttachment = {
   mimeType: string;
   size: number;
   kind: string; // "file" | "html"
+  version: number;
+  rootId: string | null;
 };
 type Design = {
   id: string;
@@ -186,6 +196,7 @@ export default function StructureClient({
                   hidden={{ solutionId: selected.id }}
                   placeholder="New module name…"
                   cta="Add module"
+                  label="module"
                 />
               </div>
             </div>
@@ -252,6 +263,7 @@ function ModuleBlock({ module }: { module: Module }) {
             hidden={{ moduleId: module.id }}
             placeholder="New submodule name…"
             cta="Add submodule"
+            label="submodule"
           />
         </div>
       )}
@@ -396,9 +408,11 @@ function DesignRow({
 
   if (editing && canManage) {
     return (
-      <form
+      <ActionForm
         action={A.updateDesign}
-        onSubmit={() => setTimeout(() => setEditing(false), 0)}
+        success="Design updated."
+        error="Couldn't update the design. Please try again."
+        onDone={() => setEditing(false)}
         className="flex flex-wrap items-center gap-2 rounded-md border border-brand-200 bg-white p-2"
       >
         <input type="hidden" name="id" value={design.id} />
@@ -421,9 +435,9 @@ function DesignRow({
           className="input w-full py-1 text-xs"
           placeholder="https://claude.ai/… (optional)"
         />
-        <button className="btn-primary btn-sm" type="submit">
+        <SubmitButton className="btn-primary btn-sm" pendingLabel="Saving…">
           Save
-        </button>
+        </SubmitButton>
         <button
           type="button"
           className="btn-secondary btn-sm"
@@ -431,7 +445,7 @@ function DesignRow({
         >
           Cancel
         </button>
-      </form>
+      </ActionForm>
     );
   }
   return (
@@ -485,48 +499,25 @@ function DesignRow({
 
       {design.attachments.length > 0 && (
         <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2">
-          {design.attachments.map((att) => (
-            <li
-              key={att.id}
-              className="flex items-center justify-between gap-2 text-xs"
-            >
-              <a
-                href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex min-w-0 items-center gap-1.5 text-slate-600 hover:text-brand-600"
-              >
-                <span>{att.kind === "html" ? "◈" : "📎"}</span>
-                <span className="truncate">{att.name}</span>
-                <span className="shrink-0 text-slate-400">
-                  {fmtSize(att.size)}
-                </span>
-                {att.kind === "html" && (
-                  <span className="badge bg-brand-50 text-brand-700">
-                    standalone HTML
-                  </span>
-                )}
-              </a>
-              {canManage && (
-                <form action={A.deleteDesignAttachment}>
-                  <input type="hidden" name="id" value={att.id} />
-                  <button
-                    type="submit"
-                    className="shrink-0 text-slate-400 hover:text-red-600"
-                  >
-                    ✕
-                  </button>
-                </form>
-              )}
-            </li>
+          {/* Newest version per file — older revisions live behind the preview
+              page's version picker. */}
+          {groupRevisions(design.attachments).map(({ latest, versions }) => (
+            <AttachmentRow
+              key={latest.id}
+              attachment={latest}
+              versionCount={versions.length}
+              canManage={canManage}
+            />
           ))}
         </ul>
       )}
 
       {addingFile && (
-        <form
+        <ActionForm
           action={A.addDesignAttachment}
-          onSubmit={() => setTimeout(() => setAddingFile(false), 0)}
+          success="File attached."
+          error="The upload failed. Check the file and try again."
+          onDone={() => setAddingFile(false)}
           className="mt-2 flex items-center gap-2 border-t border-slate-100 pt-2"
         >
           <input type="hidden" name="designId" value={design.id} />
@@ -536,12 +527,117 @@ function DesignRow({
             required
             className="flex-1 text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-slate-100 file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-200"
           />
-          <button className="btn-primary btn-sm" type="submit">
+          <SubmitButton className="btn-primary btn-sm" pendingLabel="Uploading…">
             Upload
-          </button>
-        </form>
+          </SubmitButton>
+        </ActionForm>
       )}
     </div>
+  );
+}
+
+/**
+ * One attached file — its newest version — with an inline "New version" upload
+ * for a redesign. The revision reuses the preview link already shared in
+ * Linear, so reviewers see the new design at the URL they already have.
+ */
+function AttachmentRow({
+  attachment: att,
+  versionCount,
+  canManage,
+}: {
+  attachment: DesignAttachment;
+  versionCount: number;
+  canManage: boolean;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  return (
+    <li className="text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <a
+          href={att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-w-0 items-center gap-1.5 text-slate-600 hover:text-brand-600"
+        >
+          <span>{att.kind === "html" ? "◈" : "📎"}</span>
+          <span className="truncate">{att.name}</span>
+          <span className="shrink-0 text-slate-400">{fmtSize(att.size)}</span>
+          {versionCount > 1 && (
+            <span className="badge shrink-0 bg-brand-50 text-brand-700">
+              v{att.version}
+            </span>
+          )}
+          {att.kind === "html" && (
+            <span className="badge bg-brand-50 text-brand-700">
+              standalone HTML
+            </span>
+          )}
+        </a>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUploading((o) => !o)}
+              className="font-medium text-slate-400 hover:text-brand-600"
+              title="Upload a redesign — the preview link already shared in Linear will show it"
+            >
+              New version
+            </button>
+            <ActionForm
+              action={A.deleteDesignAttachment}
+              confirm={
+                versionCount > 1
+                  ? `Remove "${att.name}" and all ${versionCount} of its versions?`
+                  : `Remove "${att.name}" from this design?`
+              }
+              success="Attachment removed."
+              error="Couldn't remove the attachment. Please try again."
+            >
+              <input type="hidden" name="id" value={att.id} />
+              <SubmitButton
+                className="shrink-0 text-slate-400 hover:text-red-600 disabled:opacity-60"
+                aria-label={`Remove ${att.name}`}
+              >
+                ✕
+              </SubmitButton>
+            </ActionForm>
+          </div>
+        )}
+      </div>
+
+      {uploading && canManage && (
+        <ActionForm
+          action={A.addDesignRevision}
+          success={`Uploaded as v${att.version + 1} — the shared preview link now shows it.`}
+          error="The upload failed. Check the file and try again."
+          onDone={() => setUploading(false)}
+          className="mt-1.5 flex items-center gap-2 rounded-md border border-brand-200 bg-brand-50/40 p-2"
+        >
+          <input type="hidden" name="attachmentId" value={att.id} />
+          <input
+            type="file"
+            name="file"
+            required
+            className="min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-white file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-100"
+          />
+          <SubmitButton
+            className="btn-primary btn-sm shrink-0"
+            pendingLabel="Uploading…"
+          >
+            Upload v{att.version + 1}
+          </SubmitButton>
+          <button
+            type="button"
+            onClick={() => setUploading(false)}
+            className="btn-secondary btn-sm shrink-0"
+          >
+            Cancel
+          </button>
+        </ActionForm>
+      )}
+    </li>
   );
 }
 
@@ -558,9 +654,11 @@ function DesignAdd({ flowId }: { flowId: string }) {
     );
   }
   return (
-    <form
+    <ActionForm
       action={A.createDesign}
-      onSubmit={() => setTimeout(() => setOpen(false), 0)}
+      success="Design added."
+      error="Couldn't add the design. Please try again."
+      onDone={() => setOpen(false)}
       className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2"
     >
       <input type="hidden" name="flowId" value={flowId} />
@@ -581,9 +679,9 @@ function DesignAdd({ flowId }: { flowId: string }) {
         className="input w-full py-1 text-xs"
         placeholder="https://claude.ai/… (optional — attach files instead if none)"
       />
-      <button className="btn-primary btn-sm" type="submit">
+      <SubmitButton className="btn-primary btn-sm" pendingLabel="Adding…">
         Add
-      </button>
+      </SubmitButton>
       <button
         type="button"
         className="btn-secondary btn-sm"
@@ -591,7 +689,7 @@ function DesignAdd({ flowId }: { flowId: string }) {
       >
         Cancel
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -599,9 +697,11 @@ function LinearRow({ ticket }: { ticket: LinearTicket }) {
   const [editing, setEditing] = useState(false);
   if (editing) {
     return (
-      <form
+      <ActionForm
         action={A.updateLinearTicket}
-        onSubmit={() => setTimeout(() => setEditing(false), 0)}
+        success="Linear ticket updated."
+        error="Couldn't update the Linear ticket. Please try again."
+        onDone={() => setEditing(false)}
         className="flex flex-wrap items-center gap-2 rounded-md border border-violet-200 bg-white p-2"
       >
         <input type="hidden" name="id" value={ticket.id} />
@@ -625,9 +725,9 @@ function LinearRow({ ticket }: { ticket: LinearTicket }) {
           placeholder="https://linear.app/…"
           required
         />
-        <button className="btn-primary btn-sm" type="submit">
+        <SubmitButton className="btn-primary btn-sm" pendingLabel="Saving…">
           Save
-        </button>
+        </SubmitButton>
         <button
           type="button"
           className="btn-secondary btn-sm"
@@ -635,7 +735,7 @@ function LinearRow({ ticket }: { ticket: LinearTicket }) {
         >
           Cancel
         </button>
-      </form>
+      </ActionForm>
     );
   }
   return (
@@ -684,9 +784,11 @@ function LinearAdd({ flowId }: { flowId: string }) {
     );
   }
   return (
-    <form
+    <ActionForm
       action={A.createLinearTicket}
-      onSubmit={() => setTimeout(() => setOpen(false), 0)}
+      success="Linear ticket added."
+      error="Couldn't add the Linear ticket. Please try again."
+      onDone={() => setOpen(false)}
       className="flex flex-wrap items-center gap-2 rounded-md border border-slate-200 bg-white p-2"
     >
       <input type="hidden" name="flowId" value={flowId} />
@@ -709,9 +811,9 @@ function LinearAdd({ flowId }: { flowId: string }) {
         placeholder="https://linear.app/…"
         required
       />
-      <button className="btn-primary btn-sm" type="submit">
+      <SubmitButton className="btn-primary btn-sm" pendingLabel="Adding…">
         Add
-      </button>
+      </SubmitButton>
       <button
         type="button"
         className="btn-secondary btn-sm"
@@ -719,7 +821,7 @@ function LinearAdd({ flowId }: { flowId: string }) {
       >
         Cancel
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -736,9 +838,11 @@ function FlowAdd({ submoduleId }: { submoduleId: string }) {
     );
   }
   return (
-    <form
+    <ActionForm
       action={A.createFlow}
-      onSubmit={() => setTimeout(() => setOpen(false), 0)}
+      success="Flow added."
+      error="Couldn't add the flow. Please try again."
+      onDone={() => setOpen(false)}
       className="space-y-2 rounded-md border border-slate-200 bg-white p-3"
     >
       <input type="hidden" name="submoduleId" value={submoduleId} />
@@ -754,9 +858,9 @@ function FlowAdd({ submoduleId }: { submoduleId: string }) {
         placeholder="Short description (optional)"
       />
       <div className="flex gap-2">
-        <button className="btn-primary btn-sm" type="submit">
+        <SubmitButton className="btn-primary btn-sm" pendingLabel="Adding…">
           Add flow
-        </button>
+        </SubmitButton>
         <button
           type="button"
           className="btn-secondary btn-sm"
@@ -765,7 +869,7 @@ function FlowAdd({ submoduleId }: { submoduleId: string }) {
           Cancel
         </button>
       </div>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -801,22 +905,32 @@ function InlineAdd({
   hidden,
   placeholder,
   cta,
+  label,
 }: {
   action: (fd: FormData) => Promise<void>;
   hidden: Record<string, string>;
   placeholder: string;
   cta: string;
+  label: string;
 }) {
   return (
-    <form action={action} className="flex items-center gap-2">
+    <ActionForm
+      action={action}
+      success={`${cap(label)} added.`}
+      error={`Couldn't add the ${label}. Please try again.`}
+      className="flex items-center gap-2"
+    >
       {Object.entries(hidden).map(([k, v]) => (
         <input key={k} type="hidden" name={k} value={v} />
       ))}
       <input name="name" className="input py-1.5 text-sm" placeholder={placeholder} required />
-      <button className="btn-secondary btn-sm shrink-0" type="submit">
+      <SubmitButton
+        className="btn-secondary btn-sm shrink-0"
+        pendingLabel="Adding…"
+      >
         {cta}
-      </button>
-    </form>
+      </SubmitButton>
+    </ActionForm>
   );
 }
 
@@ -843,9 +957,11 @@ function InlineEdit({
     );
   }
   return (
-    <form
+    <ActionForm
       action={action}
-      onSubmit={() => setTimeout(() => setOpen(false), 0)}
+      success={`${cap(label)} renamed.`}
+      error={`Couldn't rename the ${label}. Please try again.`}
+      onDone={() => setOpen(false)}
       className="flex items-center gap-1"
     >
       <input type="hidden" name="id" value={id} />
@@ -857,9 +973,9 @@ function InlineEdit({
         required
         autoFocus
       />
-      <button className="btn-primary btn-sm" type="submit">
+      <SubmitButton className="btn-primary btn-sm" pendingLabel="Saving…">
         Save
-      </button>
+      </SubmitButton>
       <button
         type="button"
         className="btn-secondary btn-sm"
@@ -867,7 +983,7 @@ function InlineEdit({
       >
         ✕
       </button>
-    </form>
+    </ActionForm>
   );
 }
 
@@ -881,39 +997,35 @@ function ConfirmDelete({
   label: string;
 }) {
   return (
-    <form
+    <ActionForm
       action={action}
-      onSubmit={(e) => {
-        if (
-          !confirm(
-            `Delete this ${label}? This also removes everything inside it.`
-          )
-        ) {
-          e.preventDefault();
-        }
-      }}
+      confirm={`Delete this ${label}? This also removes everything inside it.`}
+      success={`${cap(label)} deleted.`}
+      error={`Couldn't delete the ${label}. Please try again.`}
     >
       <input type="hidden" name="id" value={id} />
-      <button
-        type="submit"
-        className="rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600"
+      <SubmitButton
+        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
         aria-label={`Delete ${label}`}
+        pendingLabel="Deleting…"
       >
         Delete
-      </button>
-    </form>
+      </SubmitButton>
+    </ActionForm>
   );
 }
 
 /* --------------------------- Dialogs --------------------------- */
 function FlowDialog({ flow, onClose }: { flow: Flow; onClose: () => void }) {
-  const handle = async (fd: FormData) => {
-    await A.updateFlow(fd);
-    onClose();
-  };
   return (
     <Modal onClose={onClose} title="Edit flow">
-      <form action={handle} className="space-y-4">
+      <ActionForm
+        action={A.updateFlow}
+        success="Flow updated."
+        error="Couldn't update the flow. Please try again."
+        onDone={onClose}
+        className="space-y-4"
+      >
         <input type="hidden" name="id" value={flow.id} />
         <div>
           <label className="label">Name</label>
@@ -936,11 +1048,9 @@ function FlowDialog({ flow, onClose }: { flow: Flow; onClose: () => void }) {
           <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
-          <button type="submit" className="btn-primary">
-            Save changes
-          </button>
+          <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
         </div>
-      </form>
+      </ActionForm>
     </Modal>
   );
 }
@@ -954,13 +1064,19 @@ function SolutionDialog({
   onClose: () => void;
   action: (fd: FormData) => Promise<void>;
 }) {
-  const handle = async (fd: FormData) => {
-    await action(fd);
-    onClose();
-  };
   return (
     <Modal onClose={onClose} title={solution ? "Edit solution" : "New solution"}>
-      <form action={handle} className="space-y-4">
+      <ActionForm
+        action={action}
+        success={solution ? "Solution updated." : "Solution created."}
+        error={
+          solution
+            ? "Couldn't update the solution. Please try again."
+            : "Couldn't create the solution. Please try again."
+        }
+        onDone={onClose}
+        className="space-y-4"
+      >
         {solution && <input type="hidden" name="id" value={solution.id} />}
         <div className="grid grid-cols-[1fr_88px_88px] gap-3">
           <div>
@@ -1027,11 +1143,11 @@ function SolutionDialog({
           <button type="button" onClick={onClose} className="btn-secondary">
             Cancel
           </button>
-          <button type="submit" className="btn-primary">
+          <SubmitButton pendingLabel={solution ? "Saving…" : "Creating…"}>
             {solution ? "Save changes" : "Create solution"}
-          </button>
+          </SubmitButton>
         </div>
-      </form>
+      </ActionForm>
     </Modal>
   );
 }

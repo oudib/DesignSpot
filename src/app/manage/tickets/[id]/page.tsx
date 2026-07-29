@@ -16,6 +16,8 @@ import {
 } from "@/lib/utils";
 import GeneratePromptButton from "@/components/GeneratePromptButton";
 import { MarkDoneButton, DeliverablesCard } from "@/components/TicketDelivery";
+import ActionForm from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -125,7 +127,12 @@ export default async function TicketDetailPage({
           <div className="card p-5">
             <h2 className="font-bold">Details</h2>
             {canManage ? (
-              <form action={updateTicketDetails} className="mt-4 space-y-4">
+              <ActionForm
+                action={updateTicketDetails}
+                success="Ticket updated."
+                error="Couldn't save the ticket. Please try again."
+                className="mt-4 space-y-4"
+              >
                 <input type="hidden" name="id" value={ticket.id} />
                 <div>
                   <label className="label">Title</label>
@@ -202,11 +209,9 @@ export default async function TicketDetailPage({
                   />
                 </div>
                 <div className="flex justify-end">
-                  <button type="submit" className="btn-primary">
-                    Save changes
-                  </button>
+                  <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
                 </div>
-              </form>
+              </ActionForm>
             ) : (
               <div className="mt-4 space-y-3.5 text-sm">
                 <Row label="Description">
@@ -266,20 +271,26 @@ export default async function TicketDetailPage({
                         <span className="text-xs text-slate-400">
                           {fmtDateTime(c.createdAt)}
                         </span>
-                        <form action={deleteComment} className="ml-auto">
+                        <ActionForm
+                          action={deleteComment}
+                          confirm="Delete this comment?"
+                          success="Comment deleted."
+                          error="Couldn't delete the comment. Please try again."
+                          className="ml-auto"
+                        >
                           <input type="hidden" name="id" value={c.id} />
                           <input
                             type="hidden"
                             name="ticketId"
                             value={ticket.id}
                           />
-                          <button
-                            type="submit"
-                            className="text-xs font-medium text-slate-400 hover:text-red-600"
+                          <SubmitButton
+                            className="inline-flex items-center gap-1 text-xs font-medium text-slate-400 hover:text-red-600 disabled:opacity-60"
+                            pendingLabel="Deleting…"
                           >
                             Delete
-                          </button>
-                        </form>
+                          </SubmitButton>
+                        </ActionForm>
                       </div>
                       <p className="mt-0.5 whitespace-pre-wrap text-sm text-slate-600">
                         {c.body}
@@ -290,7 +301,12 @@ export default async function TicketDetailPage({
               )}
             </div>
 
-            <form action={addComment} className="mt-5 border-t border-slate-100 pt-4">
+            <ActionForm
+              action={addComment}
+              success="Comment added."
+              error="Couldn't post the comment. Please try again."
+              className="mt-5 border-t border-slate-100 pt-4"
+            >
               <input type="hidden" name="ticketId" value={ticket.id} />
               <label className="label">Add a comment</label>
               <textarea
@@ -301,11 +317,9 @@ export default async function TicketDetailPage({
                 placeholder="Write a comment…"
               />
               <div className="mt-2 flex justify-end">
-                <button type="submit" className="btn-primary">
-                  Comment
-                </button>
+                <SubmitButton pendingLabel="Posting…">Comment</SubmitButton>
               </div>
-            </form>
+            </ActionForm>
           </div>
         </div>
 
@@ -362,12 +376,19 @@ export default async function TicketDetailPage({
           </div>
 
           {canManage && (
-            <form action={deleteTicketAndRedirect}>
+            <ActionForm
+              action={deleteTicketAndRedirect}
+              confirm={`Delete "${ticket.title}"? This can't be undone.`}
+              error="Couldn't delete the ticket. Please try again."
+            >
               <input type="hidden" name="id" value={ticket.id} />
-              <button type="submit" className="btn-danger w-full">
+              <SubmitButton
+                className="btn-danger w-full"
+                pendingLabel="Deleting…"
+              >
                 Delete ticket
-              </button>
-            </form>
+              </SubmitButton>
+            </ActionForm>
           )}
         </aside>
       </div>

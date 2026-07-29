@@ -5,6 +5,7 @@ import { currentRole } from "@/lib/access";
 import { logout } from "./actions";
 import ManageNav from "@/components/ManageNav";
 import Logo from "@/components/Logo";
+import SubmitButton from "@/components/SubmitButton";
 
 export default async function ManageLayout({
   children,
@@ -37,7 +38,9 @@ export default async function ManageLayout({
               {session?.name}
             </span>
             <form action={logout}>
-              <button className="btn-secondary btn-sm">Sign out</button>
+              <SubmitButton className="btn-secondary btn-sm" pendingLabel="Signing out…">
+                Sign out
+              </SubmitButton>
             </form>
           </div>
         </div>

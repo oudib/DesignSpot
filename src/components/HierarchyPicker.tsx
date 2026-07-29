@@ -8,6 +8,7 @@ import {
   quickCreateFlow,
 } from "@/app/manage/actions";
 import Spinner from "./Spinner";
+import { useActionToast } from "./ActionForm";
 
 export type FlowLite = { id: string; name: string };
 export type SubLite = { id: string; name: string; flows: FlowLite[] };
@@ -200,17 +201,20 @@ function Level({
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const { run } = useActionToast();
 
   const submit = async () => {
     const name = draft.trim();
     if (!name) return;
     setBusy(true);
-    try {
-      await onCreate(name);
+    const { ok } = await run(() => onCreate(name), {
+      success: `${label} “${name}” created.`,
+      error: `Couldn't create the ${label.toLowerCase()}. Please try again.`,
+    });
+    setBusy(false);
+    if (ok) {
       setDraft("");
       setCreating(false);
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -240,6 +244,7 @@ function Level({
             className="btn-primary btn-sm shrink-0"
           >
             {busy ? <Spinner /> : "Add"}
+            {busy && <span className="sr-only">Adding…</span>}
           </button>
           <button
             type="button"

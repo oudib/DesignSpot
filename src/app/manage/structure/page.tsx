@@ -64,6 +64,8 @@ export default async function StructurePage() {
               mimeType: a.mimeType,
               size: a.size,
               kind: a.kind,
+              version: a.version,
+              rootId: a.rootId,
             })),
           })),
           linearTickets: f.linearTickets.map((lt) => ({

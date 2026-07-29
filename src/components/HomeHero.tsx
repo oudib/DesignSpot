@@ -5,6 +5,7 @@ import { logout } from "@/app/manage/actions";
 import LinearFinder from "./LinearFinder";
 import HomeSearch from "./HomeSearch";
 import DarkHero from "./DarkHero";
+import SubmitButton from "./SubmitButton";
 
 const TIMEZONE = "Africa/Casablanca";
 
@@ -70,9 +71,12 @@ export default async function HomeHero({
                   {session.name?.charAt(0).toUpperCase()}
                 </span>
                 <form action={logout}>
-                  <button className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20 sm:py-2.5 sm:text-sm">
+                  <SubmitButton
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-xs font-semibold text-white backdrop-blur transition hover:bg-white/20 disabled:opacity-60 sm:py-2.5 sm:text-sm"
+                    pendingLabel="Signing out…"
+                  >
                     Sign out
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             ) : (

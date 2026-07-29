@@ -7,9 +7,13 @@ import {
   updateDesign,
   deleteDesign,
   deleteDesignAttachment,
+  addDesignRevision,
 } from "@/app/manage/actions";
+import { groupRevisions } from "@/lib/revisions";
 import DeliveryDialog from "@/components/DeliveryDialog";
 import Spinner from "@/components/Spinner";
+import ActionForm, { useActionToast } from "@/components/ActionForm";
+import SubmitButton from "@/components/SubmitButton";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
 
 type TicketLite = {
@@ -26,6 +30,8 @@ type Attachment = {
   url: string;
   kind: string;
   size: number;
+  version: number;
+  rootId: string | null;
 };
 
 type DesignWithAttachments = {
@@ -53,6 +59,7 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const { run } = useActionToast();
 
   if (ticket.status === "done") return null;
 
@@ -64,15 +71,15 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
         type="button"
         onClick={async () => {
           setPending(true);
-          try {
-            await markDone(ticket.id);
+          await run(() => markDone(ticket.id), {
+            success: "Ticket marked as done.",
+            error: "Couldn't mark the ticket as done. Please try again.",
             // setTicketStatus is called directly (not via a <form action>),
             // so the router cache needs an explicit nudge to pick up the
             // fresh status on this Server Component page.
-            router.refresh();
-          } finally {
-            setPending(false);
-          }
+            onDone: () => router.refresh(),
+          });
+          setPending(false);
         }}
         disabled={pending}
         className="btn-secondary shrink-0"
@@ -103,14 +110,129 @@ export function MarkDoneButton({ ticket }: { ticket: TicketLite }) {
             router.refresh();
           }}
           onSkip={async () => {
-            await markDone(ticket.id);
-            setOpen(false);
-            router.refresh();
+            await run(() => markDone(ticket.id), {
+              success: "Ticket marked as done.",
+              error: "Couldn't mark the ticket as done. Please try again.",
+              onDone: () => {
+                setOpen(false);
+                router.refresh();
+              },
+            });
           }}
           onCancel={() => setOpen(false)}
         />
       )}
     </>
+  );
+}
+
+/**
+ * One deliverable file: its newest version, with the version count, and (for
+ * the people responsible) an inline "New version" upload. Re-uploading here
+ * keeps the preview link that was already shared in Linear — it starts serving
+ * the new design instead of the old one.
+ */
+function AttachmentRow({
+  attachment: att,
+  versionCount,
+  canManage,
+}: {
+  attachment: Attachment;
+  versionCount: number;
+  canManage: boolean;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  return (
+    <li>
+      <div className="flex items-center justify-between gap-2">
+        <a
+          href={
+            att.kind === "html" ? attachmentPreviewUrl(att.url) : att.url
+          }
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-w-0 items-center gap-1.5 text-slate-500 hover:text-brand-600"
+        >
+          <span>{att.kind === "html" ? "◈" : "📎"}</span>
+          <span className="truncate">{att.name}</span>
+          <span className="shrink-0 text-xs text-slate-400">
+            {fmtSize(att.size)}
+          </span>
+          {versionCount > 1 && (
+            <span className="badge shrink-0 bg-brand-50 text-brand-700">
+              v{att.version}
+            </span>
+          )}
+          {att.kind === "html" && (
+            <span className="badge bg-brand-50 text-brand-700">
+              standalone HTML
+            </span>
+          )}
+        </a>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setUploading((o) => !o)}
+              className="text-xs font-medium text-slate-400 hover:text-brand-600"
+              title="Upload a redesign — the preview link already shared in Linear will show it"
+            >
+              New version
+            </button>
+            <ActionForm
+              action={deleteDesignAttachment}
+              confirm={
+                versionCount > 1
+                  ? `Remove "${att.name}" and all ${versionCount} of its versions?`
+                  : `Remove "${att.name}" from this delivery?`
+              }
+              success="Attachment removed."
+              error="Couldn't remove the attachment. Please try again."
+            >
+              <input type="hidden" name="id" value={att.id} />
+              <SubmitButton
+                className="shrink-0 text-slate-400 hover:text-red-600 disabled:opacity-60"
+                aria-label={`Remove ${att.name}`}
+              >
+                ✕
+              </SubmitButton>
+            </ActionForm>
+          </div>
+        )}
+      </div>
+
+      {uploading && canManage && (
+        <ActionForm
+          action={addDesignRevision}
+          success={`Uploaded as v${att.version + 1} — the shared preview link now shows it.`}
+          error="The upload failed. Check the file and try again."
+          onDone={() => setUploading(false)}
+          className="mt-1.5 flex items-center gap-2 rounded-lg border border-brand-200 bg-brand-50/40 p-2"
+        >
+          <input type="hidden" name="attachmentId" value={att.id} />
+          <input
+            type="file"
+            name="file"
+            required
+            className="min-w-0 flex-1 text-xs text-slate-500 file:mr-2 file:rounded-md file:border-0 file:bg-white file:px-2 file:py-1 file:text-xs file:font-medium file:text-slate-600 hover:file:bg-slate-100"
+          />
+          <SubmitButton
+            className="btn-primary btn-sm shrink-0"
+            pendingLabel="Uploading…"
+          >
+            Upload v{att.version + 1}
+          </SubmitButton>
+          <button
+            type="button"
+            onClick={() => setUploading(false)}
+            className="btn-secondary btn-sm shrink-0"
+          >
+            Cancel
+          </button>
+        </ActionForm>
+      )}
+    </li>
   );
 }
 
@@ -158,9 +280,11 @@ export function DeliverablesCard({
           {designs.map((d) =>
             editingId === d.id ? (
               <li key={d.id}>
-                <form
+                <ActionForm
                   action={updateDesign}
-                  onSubmit={() => setTimeout(() => setEditingId(null), 0)}
+                  success="Delivery updated."
+                  error="Couldn't update the delivery. Please try again."
+                  onDone={() => setEditingId(null)}
                   className="space-y-2 rounded-lg border border-brand-200 bg-brand-50/30 p-3"
                 >
                   <input type="hidden" name="id" value={d.id} />
@@ -194,11 +318,14 @@ export function DeliverablesCard({
                     >
                       Cancel
                     </button>
-                    <button type="submit" className="btn-primary btn-sm">
+                    <SubmitButton
+                      className="btn-primary btn-sm"
+                      pendingLabel="Saving…"
+                    >
                       Save
-                    </button>
+                    </SubmitButton>
                   </div>
-                </form>
+                </ActionForm>
               </li>
             ) : (
               <li key={d.id} className="space-y-1.5 text-sm">
@@ -231,69 +358,34 @@ export function DeliverablesCard({
                       >
                         Edit
                       </button>
-                      <form
+                      <ActionForm
                         action={deleteDesign}
-                        onSubmit={(e) => {
-                          if (
-                            !confirm(
-                              `Delete "${d.title}"? This also removes its attachments.`,
-                            )
-                          ) {
-                            e.preventDefault();
-                          }
-                        }}
+                        confirm={`Delete "${d.title}"? This also removes its attachments.`}
+                        success="Delivery deleted."
+                        error="Couldn't delete the delivery. Please try again."
                       >
                         <input type="hidden" name="id" value={d.id} />
-                        <button
-                          type="submit"
-                          className="text-slate-400 hover:text-red-600"
+                        <SubmitButton
+                          className="text-slate-400 hover:text-red-600 disabled:opacity-60"
+                          aria-label={`Delete ${d.title}`}
                         >
                           ✕
-                        </button>
-                      </form>
+                        </SubmitButton>
+                      </ActionForm>
                     </div>
                   )}
                 </div>
                 {d.attachments.length > 0 && (
                   <ul className="ml-5 space-y-1">
-                    {d.attachments.map((att) => (
-                      <li
-                        key={att.id}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <a
-                          href={
-                            att.kind === "html"
-                              ? attachmentPreviewUrl(att.url)
-                              : att.url
-                          }
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex min-w-0 items-center gap-1.5 text-slate-500 hover:text-brand-600"
-                        >
-                          <span>{att.kind === "html" ? "◈" : "📎"}</span>
-                          <span className="truncate">{att.name}</span>
-                          <span className="shrink-0 text-xs text-slate-400">
-                            {fmtSize(att.size)}
-                          </span>
-                          {att.kind === "html" && (
-                            <span className="badge bg-brand-50 text-brand-700">
-                              standalone HTML
-                            </span>
-                          )}
-                        </a>
-                        {canManage && (
-                          <form action={deleteDesignAttachment}>
-                            <input type="hidden" name="id" value={att.id} />
-                            <button
-                              type="submit"
-                              className="shrink-0 text-slate-400 hover:text-red-600"
-                            >
-                              ✕
-                            </button>
-                          </form>
-                        )}
-                      </li>
+                    {/* One row per deliverable file — its newest version. Older
+                        revisions stay reachable from the preview page. */}
+                    {groupRevisions(d.attachments).map(({ latest, versions }) => (
+                      <AttachmentRow
+                        key={latest.id}
+                        attachment={latest}
+                        versionCount={versions.length}
+                        canManage={canManage}
+                      />
                     ))}
                   </ul>
                 )}

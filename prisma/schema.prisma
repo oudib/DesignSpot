@@ -162,6 +162,16 @@ model DesignAttachment {
   designId  String
   design    Design   @relation(fields: [designId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
+
+  // Revision chain. A redesign is re-uploaded as v2/v3… of the SAME deliverable
+  // instead of an unrelated file: `rootId` points at the first version (null on
+  // that first version itself). /preview/{driveId} resolves the whole chain and
+  // renders the newest version, so every preview link already shared in a
+  // Linear comment keeps working and shows the latest design.
+  version   Int      @default(1)
+  rootId    String?
+  root      DesignAttachment?  @relation("AttachmentRevisions", fields: [rootId], references: [id], onDelete: Cascade)
+  revisions DesignAttachment[] @relation("AttachmentRevisions")
 }
 
 model Ticket {
