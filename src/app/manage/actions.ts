@@ -510,10 +510,9 @@ export async function addDesignRevision(fd: FormData) {
     where: { OR: [{ id: rootId }, { rootId }] },
     orderBy: { version: "asc" },
   });
-  const root = chain.find((a) => a.id === rootId) ?? current;
   const nextVersion = Math.max(...chain.map((a) => a.version), 1) + 1;
 
-  const { path, url, driveUrl } = await uploadAttachment(current.design.id, file);
+  const { path, url } = await uploadAttachment(current.design.id, file);
   await prisma.designAttachment.create({
     data: {
       designId: current.design.id,
@@ -528,22 +527,16 @@ export async function addDesignRevision(fd: FormData) {
     },
   });
 
-  // Ping every Linear issue tied to this flow with the *stable* link (the first
-  // version's preview URL) — the same one they were originally given.
+  // The preview link shared on the first upload is stable across versions, so a
+  // revision only needs to say it happened — no link, no Drive backup, no v-number.
   const key = await actingLinearKey(actor.userId);
   if (key) {
     const tickets = await prisma.ticket.findMany({
       where: { flowId: current.design.flowId, NOT: { linearUrl: "" } },
       select: { linearUrl: true },
     });
-    const previewUrl = absoluteUrl(attachmentPreviewUrl(root.url));
-    const lines = [
-      `🔁 Design updated to v${nextVersion}: **${current.design.title}**`,
-      `Design Preview (same link, now showing v${nextVersion}) :\n${previewUrl}`,
-      `📁 Google Drive backup: ${driveUrl}`,
-    ];
     for (const t of tickets) {
-      await postLinearComment(key, t.linearUrl, lines.join("\n"));
+      await postLinearComment(key, t.linearUrl, "Design Updated");
     }
   }
   revalidateAll();
