@@ -1,9 +1,67 @@
 "use client";
 
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
 import { createDesign } from "@/app/manage/actions";
 import Spinner from "./Spinner";
+import SubmitButton from "./SubmitButton";
 import { useToast } from "./Toast";
+
+/**
+ * Footer buttons, split into their own component so they can read the form's
+ * pending state with useFormStatus. A `useState` flag set inside the form
+ * action wouldn't do: React runs that action in a transition, so the update
+ * only paints once the upload has already finished — the button would sit
+ * there looking clickable for the whole request.
+ */
+function DialogActions({
+  mode,
+  onCancel,
+  onSkip,
+  skipping,
+}: {
+  mode: "complete" | "attach";
+  onCancel: () => void;
+  onSkip?: () => void | Promise<void>;
+  skipping: boolean;
+}) {
+  const { pending } = useFormStatus();
+
+  return (
+    <div className="flex items-center justify-between pt-2">
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={pending || skipping}
+        className="btn-secondary"
+        title={
+          mode === "complete"
+            ? "Leave the ticket where it is"
+            : "Close without adding a delivery"
+        }
+      >
+        Cancel
+      </button>
+      <div className="flex gap-2">
+        {onSkip && (
+          <button
+            type="button"
+            onClick={onSkip}
+            disabled={pending || skipping}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 disabled:opacity-60"
+            title="Mark it Done without a delivery"
+          >
+            {skipping && <Spinner />}
+            {skipping ? "Skipping…" : "Skip"}
+          </button>
+        )}
+        <SubmitButton disabled={skipping} pendingLabel="Delivering…">
+          Deliver design
+        </SubmitButton>
+      </div>
+    </div>
+  );
+}
 
 type DeliveryTicket = {
   id: string;
@@ -33,7 +91,6 @@ export default function DeliveryDialog({
   onSkip?: () => void | Promise<void>;
   onCancel: () => void;
 }) {
-  const [pending, setPending] = useState(false);
   const [method, setMethod] = useState<"file" | "drive">("file");
   const [error, setError] = useState("");
   const [markDone, setMarkDone] = useState(false);
@@ -45,7 +102,6 @@ export default function DeliveryDialog({
   const showMarkDone = mode === "attach" && ticket.status !== "done";
 
   const handleSave = async (fd: FormData) => {
-    setPending(true);
     setError("");
     // createDesign folds the "done" comment into the same Linear comment
     // as the delivery when markDone is set, instead of posting two.
@@ -64,7 +120,6 @@ export default function DeliveryDialog({
         "The delivery couldn't be saved — check the file or link and try again.";
       setError(message);
       toast.error(message);
-      setPending(false);
     }
   };
 
@@ -201,46 +256,22 @@ export default function DeliveryDialog({
             </p>
           )}
 
-          <div className="flex items-center justify-between pt-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              disabled={pending}
-              className="btn-secondary"
-              title={
-                mode === "complete"
-                  ? "Leave the ticket where it is"
-                  : "Close without adding a delivery"
-              }
-            >
-              Cancel
-            </button>
-            <div className="flex gap-2">
-              {onSkip && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    setSkipping(true);
-                    try {
-                      await onSkip();
-                    } finally {
-                      setSkipping(false);
-                    }
-                  }}
-                  disabled={pending || skipping}
-                  className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 disabled:opacity-60"
-                  title="Mark it Done without a delivery"
-                >
-                  {skipping && <Spinner />}
-                  {skipping ? "Skipping…" : "Skip"}
-                </button>
-              )}
-              <button type="submit" disabled={pending} className="btn-primary">
-                {pending && <Spinner />}
-                {pending ? "Delivering…" : "Deliver design"}
-              </button>
-            </div>
-          </div>
+          <DialogActions
+            mode={mode}
+            onCancel={onCancel}
+            onSkip={
+              onSkip &&
+              (async () => {
+                setSkipping(true);
+                try {
+                  await onSkip();
+                } finally {
+                  setSkipping(false);
+                }
+              })
+            }
+            skipping={skipping}
+          />
         </form>
       </div>
     </div>
