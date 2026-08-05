@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import * as A from "@/app/manage/actions";
 import { cn, SOLUTION_LANGUAGES, languageMeta } from "@/lib/utils";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
@@ -74,18 +74,34 @@ function useCanManageFlow(flow: Flow) {
   return actor.isAdmin || (!!actor.userId && flow.designerIds.includes(actor.userId));
 }
 
+/* ---------------------------- Focus ------------------------------ */
+// Id of the flow the page was opened on (`?flow=<id>`). Every block on the
+// path down to it starts expanded, so the tree lands on that flow instead of
+// making you re-open the whole branch by hand.
+const FocusContext = createContext<string | null>(null);
+
 /* --------------------------- Component -------------------------- */
 export default function StructureClient({
   solutions,
   isAdmin,
   currentUserId,
+  focusFlowId = null,
 }: {
   solutions: Solution[];
   isAdmin: boolean;
   currentUserId: string | null;
+  focusFlowId?: string | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(
-    solutions[0]?.id ?? null
+    // Open on the focused flow's solution when arriving from a flow page.
+    (focusFlowId &&
+      solutions.find((s) =>
+        s.modules.some((m) =>
+          m.submodules.some((sm) => sm.flows.some((f) => f.id === focusFlowId))
+        )
+      )?.id) ||
+      solutions[0]?.id ||
+      null
   );
   const [addingSolution, setAddingSolution] = useState(false);
   const [editingSolution, setEditingSolution] = useState<Solution | null>(null);
@@ -94,6 +110,7 @@ export default function StructureClient({
 
   return (
     <ActorContext.Provider value={{ isAdmin, userId: currentUserId }}>
+    <FocusContext.Provider value={focusFlowId}>
     <div>
       <div className="flex items-center justify-between">
         <div>
@@ -222,13 +239,17 @@ export default function StructureClient({
         />
       )}
     </div>
+    </FocusContext.Provider>
     </ActorContext.Provider>
   );
 }
 
 /* --------------------------- Module ---------------------------- */
 function ModuleBlock({ module }: { module: Module }) {
-  const [open, setOpen] = useState(false);
+  const focusFlowId = useContext(FocusContext);
+  const [open, setOpen] = useState(() =>
+    module.submodules.some((sm) => sm.flows.some((f) => f.id === focusFlowId))
+  );
   return (
     <div className="rounded-xl border border-slate-200">
       <div className="flex items-center justify-between px-4 py-3">
@@ -273,7 +294,10 @@ function ModuleBlock({ module }: { module: Module }) {
 
 /* ------------------------- Submodule --------------------------- */
 function SubmoduleBlock({ submodule }: { submodule: Submodule }) {
-  const [open, setOpen] = useState(false);
+  const focusFlowId = useContext(FocusContext);
+  const [open, setOpen] = useState(() =>
+    submodule.flows.some((f) => f.id === focusFlowId)
+  );
   return (
     <div className="rounded-lg border border-slate-200 bg-white">
       <div className="flex items-center justify-between px-3 py-2.5">
@@ -318,11 +342,28 @@ function SubmoduleBlock({ submodule }: { submodule: Submodule }) {
 
 /* ---------------------------- Flow ----------------------------- */
 function FlowBlock({ flow }: { flow: Flow }) {
-  const [open, setOpen] = useState(false);
+  const focused = useContext(FocusContext) === flow.id;
+  const [open, setOpen] = useState(focused);
   const [editing, setEditing] = useState(false);
   const canManage = useCanManageFlow(flow);
+
+  // Arriving from a flow page: bring the flow into view, since it can sit far
+  // down a long tree once its branch is expanded.
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focused) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focused]);
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50/60">
+    <div
+      ref={ref}
+      className={cn(
+        "rounded-lg border bg-slate-50/60",
+        focused
+          ? "border-brand-300 ring-2 ring-brand-200"
+          : "border-slate-200"
+      )}
+    >
       <div className="flex items-center justify-between px-3 py-2.5">
         <button
           onClick={() => setOpen((o) => !o)}

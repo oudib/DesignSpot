@@ -4,10 +4,15 @@ import SiteHeader from "@/components/SiteHeader";
 import DarkHero from "@/components/DarkHero";
 import { prisma } from "@/lib/db";
 import { tint, statusMeta, priorityMeta } from "@/lib/utils";
-import { currentActor } from "@/lib/access";
+import { currentActor, currentRole } from "@/lib/access";
+import { hasWorkspaceAccess } from "@/lib/auth";
 import FlowDesignsPanel from "@/components/FlowDesignsPanel";
 
 export const dynamic = "force-dynamic";
+
+/** Shared pill styling for the hero's action buttons. */
+const heroBtn =
+  "inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20";
 
 function initials(name: string) {
   return name
@@ -70,6 +75,9 @@ export default async function FlowPage({
   const canManage =
     !!actor &&
     (actor.isAdmin || designers.some((d) => d.id === actor.userId));
+  // The workspace link is only worth showing to someone /manage would let in —
+  // viewers get redirected home by its layout.
+  const canEdit = canManage && hasWorkspaceAccess(await currentRole());
 
 
   return (
@@ -119,19 +127,27 @@ export default async function FlowPage({
               </div>
             </div>
 
-            {(() => {
-              const linked = flow.tickets.find((t) => t.linearUrl);
-              return linked ? (
-                <a
-                  href={linked.linearUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-white/15 bg-white/10 px-4 py-2.5 text-sm font-semibold text-white backdrop-blur transition hover:bg-white/20"
-                >
-                  <span className="text-violet-300">◆</span> Open in Linear
-                </a>
-              ) : null;
-            })()}
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {(() => {
+                const linked = flow.tickets.find((t) => t.linearUrl);
+                return linked ? (
+                  <a
+                    href={linked.linearUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={heroBtn}
+                  >
+                    <span className="text-violet-300">◆</span> Open in Linear
+                  </a>
+                ) : null;
+              })()}
+              {/* Straight to this flow in the workspace tree, already expanded. */}
+              {canEdit && (
+                <Link href={`/manage/structure?flow=${flow.id}`} className={heroBtn}>
+                  <span className="text-brand-300">✎</span> Edit in workspace
+                </Link>
+              )}
+            </div>
           </div>
         </div>
       </DarkHero>

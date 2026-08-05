@@ -4,7 +4,14 @@ import { currentActor } from "@/lib/access";
 
 export const dynamic = "force-dynamic";
 
-export default async function StructurePage() {
+export default async function StructurePage({
+  searchParams,
+}: {
+  // `?flow=<id>` — set by the "Edit in workspace" button on a flow page, so the
+  // tree opens straight onto that flow instead of collapsed at the top.
+  searchParams: Promise<{ flow?: string }>;
+}) {
+  const { flow: focusFlowId } = await searchParams;
   const actor = await currentActor();
   const solutions = await prisma.solution.findMany({
     orderBy: { order: "asc" },
@@ -91,6 +98,7 @@ export default async function StructurePage() {
       solutions={data}
       isAdmin={actor?.isAdmin ?? false}
       currentUserId={actor?.userId ?? null}
+      focusFlowId={focusFlowId ?? null}
     />
   );
 }
