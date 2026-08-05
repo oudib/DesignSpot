@@ -404,16 +404,19 @@ export async function createDesign(fd: FormData) {
         where: { flowId, NOT: { linearUrl: "" } },
         select: { id: true, linearUrl: true },
       });
-      const label = variant ? `${title} (${variant})` : title;
       // In-app preview page for the uploaded delivery file, if any.
       const previewUrl = attachmentUrl ? absoluteUrl(attachmentPreviewUrl(attachmentUrl)) : "";
+      // Everything goes in as markdown links so the comment stays two short
+      // lines instead of a wall of raw URLs.
+      const secondary = [
+        linkUrl && `[Claude design link](${linkUrl})`,
+        // Fallback so the delivery is still reachable if the app itself is down.
+        attachmentDriveUrl && `[GD Backup link](${attachmentDriveUrl})`,
+      ].filter(Boolean);
       for (const t of tickets) {
         const lines: string[] = [];
-        if (sharedUrl) lines.push(`🎨 New design added: **${label}**`);
-        if (previewUrl) lines.push(`Design Preview :\n${previewUrl}`);
-        if (linkUrl) lines.push(`Claude design url:\n${linkUrl}`);
-        // Fallback so the delivery is still reachable if the app itself is down.
-        if (attachmentDriveUrl) lines.push(`📁 Google Drive backup: ${attachmentDriveUrl}`);
+        if (sharedUrl) lines.push(`Design Added: 🔗 [Link here](${previewUrl || sharedUrl})`);
+        if (secondary.length) lines.push(secondary.join(" - "));
         if (markDone && t.id === ticketId) lines.push("✅ Design completed.");
         if (lines.length) await postLinearComment(key, t.linearUrl, lines.join("\n"));
       }
@@ -528,15 +531,17 @@ export async function addDesignRevision(fd: FormData) {
   });
 
   // The preview link shared on the first upload is stable across versions, so a
-  // revision only needs to say it happened — no link, no Drive backup, no v-number.
+  // revision points back at that same root link — no Drive backup, no v-number.
   const key = await actingLinearKey(actor.userId);
   if (key) {
     const tickets = await prisma.ticket.findMany({
       where: { flowId: current.design.flowId, NOT: { linearUrl: "" } },
       select: { linearUrl: true },
     });
+    const rootUrl = chain.find((a) => a.id === rootId)?.url ?? url;
+    const body = `Design Updated: 🔗 [Link here](${absoluteUrl(attachmentPreviewUrl(rootUrl))})`;
     for (const t of tickets) {
-      await postLinearComment(key, t.linearUrl, "Design Updated");
+      await postLinearComment(key, t.linearUrl, body);
     }
   }
   revalidateAll();
