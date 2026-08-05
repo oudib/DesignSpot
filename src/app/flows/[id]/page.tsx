@@ -202,7 +202,7 @@ export default async function FlowPage({
                   return (
                     <div
                       key={t.id}
-                      className="card flex items-start justify-between gap-4 p-4"
+                      className="card flex flex-col gap-4 p-5 transition hover:border-slate-300 hover:shadow-card-hover sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
                         <Link
@@ -230,7 +230,7 @@ export default async function FlowPage({
                         {canManage && (
                           <Link
                             href={`/manage/tickets/${t.id}`}
-                            className="btn-secondary btn-sm"
+                            className="btn-secondary flex-1 sm:flex-none"
                           >
                             Edit
                           </Link>
@@ -240,7 +240,7 @@ export default async function FlowPage({
                             href={t.linearUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="btn-secondary btn-sm"
+                            className="btn-secondary flex-1 sm:flex-none"
                           >
                             <span className="text-violet-600">◆</span> Linear ↗
                           </a>

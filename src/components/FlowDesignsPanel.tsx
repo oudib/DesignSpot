@@ -5,7 +5,7 @@ import Link from "next/link";
 import { updateDesign, deleteDesign } from "@/app/manage/actions";
 import ActionForm from "@/components/ActionForm";
 import SubmitButton from "@/components/SubmitButton";
-import { tint } from "@/lib/utils";
+import { cn, tint } from "@/lib/utils";
 import { attachmentPreviewUrl, attachmentDriveUrl } from "@/lib/attachmentUrl";
 import { groupRevisions } from "@/lib/revisions";
 
@@ -47,7 +47,8 @@ export default function FlowDesignsPanel({
   }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
+    // A lone design would otherwise sit at half width next to dead space.
+    <div className={cn("grid gap-4", designs.length > 1 && "sm:grid-cols-2")}>
       {designs.map((design, i) => (
         <DesignCard
           key={design.id}
@@ -115,12 +116,12 @@ function DesignCard({
         <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
-            className="btn-secondary btn-sm"
+            className="btn-secondary"
             onClick={() => setEditing(false)}
           >
             Cancel
           </button>
-          <SubmitButton className="btn-primary btn-sm" pendingLabel="Saving…">
+          <SubmitButton className="btn-primary" pendingLabel="Saving…">
             Save
           </SubmitButton>
         </div>
@@ -129,97 +130,93 @@ function DesignCard({
   }
 
   return (
-    <div
-      className="animate-rise rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:shadow-card-hover"
+    <article
+      className="animate-rise flex flex-col rounded-2xl border border-slate-200/80 bg-white p-5 shadow-card transition-all duration-300 hover:-translate-y-1 hover:border-slate-300 hover:shadow-card-hover"
       style={{ animationDelay: `${index * 50}ms` }}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5">
-            <span
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm"
-              style={{
-                backgroundImage: `linear-gradient(135deg, ${tint(
-                  color,
-                  0.18
-                )}, ${tint(color, 0.08)})`,
-                color,
-              }}
+      <header className="flex items-start gap-3">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-base"
+          style={{
+            backgroundImage: `linear-gradient(135deg, ${tint(
+              color,
+              0.18
+            )}, ${tint(color, 0.08)})`,
+            color,
+          }}
+        >
+          ◑
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate text-[15px] font-semibold leading-snug text-slate-800">
+            {design.title}
+          </h3>
+          <p className="mt-0.5 text-xs text-slate-400">
+            {design.variant ||
+              `${design.attachments.length} file${
+                design.attachments.length === 1 ? "" : "s"
+              }`}
+          </p>
+        </div>
+        {canManage && (
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setEditing(true)}
+              className="btn-icon"
+              aria-label={`Edit ${design.title}`}
+              title="Edit"
             >
-              ◑
-            </span>
-            <p className="truncate font-semibold text-slate-800">
-              {design.title}
-            </p>
+              ✎
+            </button>
+            <ActionForm
+              action={deleteDesign}
+              confirm={`Delete "${design.title}"? This also removes its attachments.`}
+              success="Design deleted."
+              error="Couldn't delete the design. Please try again."
+            >
+              <input type="hidden" name="id" value={design.id} />
+              <SubmitButton
+                className="btn-icon hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                aria-label={`Delete ${design.title}`}
+                title="Delete"
+              >
+                ✕
+              </SubmitButton>
+            </ActionForm>
           </div>
-          {design.variant && (
-            <span className="badge mt-2 bg-slate-100 text-slate-500">
-              {design.variant}
-            </span>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-2 text-sm">
-          {design.claudeUrl && (
-            <a
-              href={design.claudeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="font-semibold text-brand-600 hover:underline"
-            >
-              Open ↗
-            </a>
-          )}
-          {canManage && (
-            <>
-              <button
-                type="button"
-                onClick={() => setEditing(true)}
-                className="font-medium text-slate-500 hover:text-brand-600"
-              >
-                Edit
-              </button>
-              <ActionForm
-                action={deleteDesign}
-                confirm={`Delete "${design.title}"? This also removes its attachments.`}
-                success="Design deleted."
-                error="Couldn't delete the design. Please try again."
-              >
-                <input type="hidden" name="id" value={design.id} />
-                <SubmitButton
-                  className="inline-flex items-center gap-1.5 font-medium text-slate-500 hover:text-red-600 disabled:opacity-60"
-                  pendingLabel="Deleting…"
-                >
-                  Delete
-                </SubmitButton>
-              </ActionForm>
-            </>
-          )}
-        </div>
-      </div>
+        )}
+      </header>
 
       {design.attachments.length > 0 && (
-        <ul className="mt-3 space-y-1.5 border-t border-slate-100 pt-3">
+        <ul className="mt-4 space-y-2.5">
           {/* Newest version of each file — the preview page holds the history. */}
           {groupRevisions(design.attachments).map(({ latest: att, versions }) => (
             <li
               key={att.id}
-              className="flex items-center justify-between gap-2 text-sm text-slate-600"
+              className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3"
             >
-              <span className="flex min-w-0 items-center gap-2">
-                <span>{att.kind === "html" ? "◈" : "📎"}</span>
-                <span className="truncate">{att.name}</span>
+              <div className="flex items-center gap-2 text-sm text-slate-600">
+                <span className="shrink-0">
+                  {att.kind === "html" ? "◈" : "📎"}
+                </span>
+                <span className="truncate" title={att.name}>
+                  {att.name}
+                </span>
                 {versions.length > 1 && (
                   <span className="badge shrink-0 bg-brand-50 text-brand-700">
                     v{att.version}
                   </span>
                 )}
-              </span>
-              <span className="flex shrink-0 items-center gap-1.5">
+              </div>
+              {/* Preview is the thing people actually come here to click, so it
+                  gets the full-width primary treatment. */}
+              <div className="mt-2.5 flex gap-2">
                 <a
                   href={attachmentPreviewUrl(att.url)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="badge bg-brand-50 text-brand-700 hover:bg-brand-100"
+                  className="btn-primary flex-1"
                 >
                   Preview
                 </a>
@@ -227,15 +224,30 @@ function DesignCard({
                   href={attachmentDriveUrl(att.url)}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="badge bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  className="btn-secondary"
+                  title="Open the Google Drive backup"
                 >
-                  Google Drive
+                  Drive ↗
                 </a>
-              </span>
+              </div>
             </li>
           ))}
         </ul>
       )}
-    </div>
+
+      {design.claudeUrl && (
+        <a
+          href={design.claudeUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={cn(
+            "btn-secondary w-full",
+            design.attachments.length ? "mt-2.5" : "mt-4"
+          )}
+        >
+          Open in Claude ↗
+        </a>
+      )}
+    </article>
   );
 }
