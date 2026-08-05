@@ -79,6 +79,14 @@ export default async function FlowPage({
   // viewers get redirected home by its layout.
   const canEdit = canManage && hasWorkspaceAccess(await currentRole());
 
+  // Tickets come back highest-priority first, so the leading one is the flow's
+  // live work item. Editing happens on its ticket page; with no ticket to land
+  // on there's still the flow's own row in the structure tree.
+  const linkedTicket = flow.tickets.find((t) => t.linearUrl) ?? flow.tickets[0];
+  const editHref = linkedTicket
+    ? `/manage/tickets/${linkedTicket.id}`
+    : `/manage/structure?flow=${flow.id}`;
+
 
   return (
     <div className="min-h-screen">
@@ -128,22 +136,18 @@ export default async function FlowPage({
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              {(() => {
-                const linked = flow.tickets.find((t) => t.linearUrl);
-                return linked ? (
-                  <a
-                    href={linked.linearUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className={heroBtn}
-                  >
-                    <span className="text-violet-300">◆</span> Open in Linear
-                  </a>
-                ) : null;
-              })()}
-              {/* Straight to this flow in the workspace tree, already expanded. */}
+              {linkedTicket?.linearUrl && (
+                <a
+                  href={linkedTicket.linearUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={heroBtn}
+                >
+                  <span className="text-violet-300">◆</span> Open in Linear
+                </a>
+              )}
               {canEdit && (
-                <Link href={`/manage/structure?flow=${flow.id}`} className={heroBtn}>
+                <Link href={editHref} className={heroBtn}>
                   <span className="text-brand-300">✎</span> Edit in workspace
                 </Link>
               )}
