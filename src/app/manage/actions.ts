@@ -674,7 +674,9 @@ export async function updateTicketDetails(fd: FormData) {
   const prev = await prisma.ticket.findUnique({ where: { id } });
   if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
   const status = s(fd, "status") || "todo";
-  const linearUrl = s(fd, "linearUrl");
+  // The Linear link is edited from its own sidebar card (linkTicketLinear), so
+  // a form that doesn't carry the field leaves the existing link untouched.
+  const linearUrl = fd.has("linearUrl") ? s(fd, "linearUrl") : prev.linearUrl;
   await prisma.ticket.update({
     where: { id },
     data: {
@@ -691,6 +693,54 @@ export async function updateTicketDetails(fd: FormData) {
     linearUrl,
     flowId: prev?.flowId ?? null,
     status,
+  });
+  revalidatePath("/manage");
+  revalidatePath("/manage/tickets");
+  revalidatePath(`/manage/tickets/${id}`);
+}
+
+// Set (or change) where a ticket lives in the hierarchy from the ticket detail
+// page. The picker can create the solution/module/submodule/flow inline, so a
+// ticket that was filed without a flow can get one without leaving the page.
+export async function setTicketLocation(fd: FormData) {
+  const session = await requireAuth();
+  const id = s(fd, "id");
+  if (!id) return;
+  const prev = await prisma.ticket.findUnique({ where: { id } });
+  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
+  const solutionId = s(fd, "solutionId") || null;
+  const flowId = s(fd, "flowId") || null;
+  if (!flowId) throw new Error("Pick or create a flow first.");
+  await prisma.ticket.update({
+    where: { id },
+    data: { solutionId, flowId },
+  });
+  // A newly attached flow gets the flow-link comment on the Linear issue.
+  await syncTicketChanges(await actingLinearKey(session.userId), prev, {
+    linearUrl: prev.linearUrl,
+    flowId,
+    status: prev.status,
+  });
+  revalidateAll();
+}
+
+// Attach, replace or clear the Linear issue on a ticket from the detail page.
+export async function linkTicketLinear(fd: FormData) {
+  const session = await requireAuth();
+  const id = s(fd, "id");
+  if (!id) return;
+  const prev = await prisma.ticket.findUnique({ where: { id } });
+  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
+  const linearUrl = s(fd, "linearUrl");
+  if (linearUrl && !/linear\.app\//i.test(linearUrl)) {
+    throw new Error("That doesn't look like a Linear link.");
+  }
+  await prisma.ticket.update({ where: { id }, data: { linearUrl } });
+  // Fresh link → flow-link comment (when there's a flow) + current status.
+  await syncTicketChanges(await actingLinearKey(session.userId), prev, {
+    linearUrl,
+    flowId: prev.flowId,
+    status: prev.status,
   });
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");

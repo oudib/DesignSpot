@@ -18,6 +18,7 @@ import GeneratePromptButton from "@/components/GeneratePromptButton";
 import { MarkDoneButton, DeliverablesCard } from "@/components/TicketDelivery";
 import ActionForm from "@/components/ActionForm";
 import SubmitButton from "@/components/SubmitButton";
+import { TicketLocationCard, TicketLinearCard } from "@/components/TicketLinks";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,7 @@ export default async function TicketDetailPage({
 }) {
   const { id } = await params;
 
-  const [ticket, users] = await Promise.all([
+  const [ticket, users, solutions] = await Promise.all([
     prisma.ticket.findUnique({
       where: { id },
       include: {
@@ -65,9 +66,38 @@ export default async function TicketDetailPage({
       },
     }),
     prisma.user.findMany({ orderBy: { name: "asc" } }),
+    prisma.solution.findMany({
+      orderBy: { order: "asc" },
+      include: {
+        modules: {
+          orderBy: { order: "asc" },
+          include: {
+            submodules: {
+              orderBy: { order: "asc" },
+              include: { flows: { orderBy: { order: "asc" } } },
+            },
+          },
+        },
+      },
+    }),
   ]);
 
   if (!ticket) notFound();
+
+  // Slim hierarchy for the location picker (same shape as the tickets board).
+  const tree = solutions.map((s) => ({
+    id: s.id,
+    name: s.name,
+    modules: s.modules.map((m) => ({
+      id: m.id,
+      name: m.name,
+      submodules: m.submodules.map((sub) => ({
+        id: sub.id,
+        name: sub.name,
+        flows: sub.flows.map((f) => ({ id: f.id, name: f.name })),
+      })),
+    })),
+  }));
 
   const actor = await currentActor();
   const canManage = await canManageFlow(actor, ticket.flowId, ticket.assigneeId);
@@ -198,16 +228,6 @@ export default async function TicketDetailPage({
                     ))}
                   </select>
                 </div>
-                <div>
-                  <label className="label">Linear ticket URL</label>
-                  <input
-                    name="linearUrl"
-                    type="url"
-                    defaultValue={ticket.linearUrl}
-                    className="input"
-                    placeholder="https://linear.app/sobrus/issue/…"
-                  />
-                </div>
                 <div className="flex justify-end">
                   <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
                 </div>
@@ -325,37 +345,23 @@ export default async function TicketDetailPage({
 
         {/* Sidebar */}
         <aside className="space-y-5 lg:sticky lg:top-20 lg:self-start">
-          <div className="card p-5">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Location
-            </h3>
-            <dl className="mt-4 space-y-3.5 text-sm">
-              <Row label="Solution">
-                {ticket.solution ? (
-                  <span className="font-medium text-slate-700">
-                    {ticket.solution.name}
-                  </span>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </Row>
-              <Row label="Flow">
-                {ticket.flow ? (
-                  <Link
-                    href={`/flows/${ticket.flow.id}`}
-                    className="font-medium text-brand-600 hover:underline"
-                  >
-                    {ticket.flow.name}
-                  </Link>
-                ) : (
-                  <span className="text-slate-400">—</span>
-                )}
-              </Row>
-            </dl>
-            <p className="mt-3 text-xs text-slate-400">
-              Change the location from the tickets board.
-            </p>
-          </div>
+          <TicketLocationCard
+            ticketId={ticket.id}
+            solution={
+              ticket.solution
+                ? { id: ticket.solution.id, name: ticket.solution.name }
+                : null
+            }
+            flow={ticket.flow ? { id: ticket.flow.id, name: ticket.flow.name } : null}
+            tree={tree}
+            canManage={canManage}
+          />
+
+          <TicketLinearCard
+            ticketId={ticket.id}
+            linearUrl={ticket.linearUrl}
+            canManage={canManage}
+          />
 
           <div className="card p-5">
             <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
