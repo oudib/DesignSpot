@@ -8,6 +8,12 @@ A platform that gathers every Sobrus solution and its design work in one place.
   the whole Solution → Module → Submodule → Flow structure, attaching Claude
   design links and Linear URLs.
 
+## REST API
+
+Designers can create personal API keys in **Workspace → Settings → API keys**
+and hand them to an agent (e.g. Claude) to manage tickets and deliveries
+through `/api/v1`. See [docs/API.md](docs/API.md).
+
 ## Stack
 
 Next.js 15 (App Router) · React 19 · TypeScript · Tailwind CSS · Prisma +

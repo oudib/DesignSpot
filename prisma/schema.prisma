@@ -28,11 +28,29 @@ model User {
 
   tickets  Ticket[]
   comments Comment[]
+  apiKeys  ApiKey[]
 
   // Optional custom "Generate a prompt" template for this designer, edited by
   // an admin in /manage/prompt-builder. Takes priority over the ticket's
   // Solution.promptTemplate, if both are set. Null = no personal override.
   promptTemplate PromptTemplate?
+}
+
+// A personal API key for the REST API under /api/v1 — made so an agent (e.g.
+// Claude) can manage tickets and deliveries on a designer's behalf. The key is
+// shown once at creation; only its SHA-256 hash is stored, plus a short prefix
+// so the owner can tell keys apart in the settings page. Requests made with a
+// key act AS the owning user (same permissions, same Linear connection).
+model ApiKey {
+  id         String    @id @default(cuid())
+  name       String // e.g. "Claude on my laptop"
+  prefix     String // first characters of the key, for display ("sds_ab12cd34…")
+  hash       String    @unique // sha256(key), hex
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
 }
 
 // A per-designer override of the design-brief prompt template used by the

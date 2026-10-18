@@ -4,79 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSession, destroySession, hasWorkspaceAccess } from "@/lib/auth";
-import { canManageFlow } from "@/lib/access";
 import { slugify } from "@/lib/utils";
-import {
-  postLinearComment,
-  getLinearViewer,
-  getLinearIssue,
-  flowUrl,
-  statusMessage,
-  absoluteUrl,
-} from "@/lib/linear";
+import { getLinearViewer, getLinearIssue } from "@/lib/linear";
 import { buildDesignPrompt } from "@/lib/designPrompt";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { uploadAttachment, deleteAttachment, attachmentKind } from "@/lib/storage";
-import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
+import { encryptSecret } from "@/lib/crypto";
+import { actingLinearKey } from "@/lib/linearSync";
+import * as tickets from "@/lib/tickets";
+import * as deliveries from "@/lib/deliveries";
 
-/* ------------------------- Linear sync helpers ------------------------ */
-// Each designer connects their own Linear, so every push uses the ACTING
-// designer's decrypted Personal API key (comments are authored as them). All
-// of these are best-effort: postLinearComment no-ops when the key is null and
-// never throws, so awaiting them is safe inside server actions.
-
-/** Decrypted Linear key for the acting designer, or null if not connected. */
-async function actingLinearKey(userId: string): Promise<string | null> {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { linearApiKey: true },
-  });
-  return decryptSecret(user?.linearApiKey);
-}
-
-async function linkFlowToLinear(
-  apiKey: string | null,
-  linearUrl: string,
-  flowId: string
-) {
-  if (!apiKey || !linearUrl || !flowId) return;
-  const flow = await prisma.flow.findUnique({ where: { id: flowId } });
-  if (!flow) return;
-  await postLinearComment(
-    apiKey,
-    linearUrl,
-    `🔗 Linked design flow: **${flow.name}**\n${flowUrl(flowId)}`
-  );
-}
-
-async function announceStatus(
-  apiKey: string | null,
-  linearUrl: string,
-  status: string
-) {
-  if (!apiKey || !linearUrl) return;
-  const msg = statusMessage(status);
-  if (msg) await postLinearComment(apiKey, linearUrl, msg);
-}
-
-// Compare a ticket's previous state to its new state and push only the events
-// that actually changed: a freshly-attached/changed Linear link or flow gets a
-// flow-link comment; a status change gets a status comment.
-async function syncTicketChanges(
-  apiKey: string | null,
-  prev: { linearUrl: string; flowId: string | null; status: string } | null,
-  next: { linearUrl: string; flowId: string | null; status: string }
-) {
-  if (!apiKey || !next.linearUrl) return;
-  const issueChanged = prev?.linearUrl !== next.linearUrl;
-  const flowChanged = prev?.flowId !== next.flowId;
-  if (next.flowId && (issueChanged || flowChanged)) {
-    await linkFlowToLinear(apiKey, next.linearUrl, next.flowId);
-  }
-  if (issueChanged || prev?.status !== next.status) {
-    await announceStatus(apiKey, next.linearUrl, next.status);
-  }
-}
+// Ticket and delivery mutations are thin wrappers over src/lib/tickets.ts and
+// src/lib/deliveries.ts — the same functions back the REST API in /api/v1, so
+// permission rules, validation and Linear sync live in one place.
 
 async function requireAuth() {
   const session = await getSession();
@@ -339,89 +277,21 @@ export async function deleteLinearTicket(fd: FormData) {
 /* ---------------------------- Designs --------------------------- */
 
 export async function createDesign(fd: FormData) {
-  const session = await requireAuth();
-  const title = s(fd, "title");
+  const actor = await requireAuth();
   // The design link can be a Claude share link or a Google Drive link — the
   // delivery dialog sends it as "linkUrl", older forms still send "claudeUrl".
-  const linkUrl = s(fd, "linkUrl") || s(fd, "claudeUrl");
-  const flowId = s(fd, "flowId");
-  if (!title || !flowId) return;
-  const variant = s(fd, "variant");
-  // Set when delivered from a ticket (board drag-to-done or the ticket detail
-  // page) — lets that ticket show only its own deliverables.
-  const ticketId = s(fd, "ticketId") || null;
-  // Set by the delivery dialog when this delivery should also mark the
-  // originating ticket done — folded into the same Linear comment below
-  // instead of firing a separate "done" comment right after this one.
-  const markDone = s(fd, "markDone") === "1" && !!ticketId;
-  const count = await prisma.design.count({ where: { flowId } });
-  const design = await prisma.design.create({
-    data: { title, claudeUrl: linkUrl, variant, flowId, ticketId, order: count },
-  });
-
-  // Optional delivery file (image, PDF, zip, HTML export…). Uploaded to
-  // Google Drive and attached to the design just created. If the upload
-  // fails, the design row is rolled back so the delivery never half-succeeds.
   const file = fd.get("file");
-  let attachmentUrl = "";
-  let attachmentDriveUrl = "";
-  if (file instanceof File && file.size > 0) {
-    try {
-      const { path, url, driveUrl } = await uploadAttachment(design.id, file);
-      await prisma.designAttachment.create({
-        data: {
-          designId: design.id,
-          name: file.name,
-          url,
-          path,
-          mimeType: file.type || "application/octet-stream",
-          size: file.size,
-          kind: attachmentKind(file.name, file.type),
-        },
-      });
-      attachmentUrl = url;
-      attachmentDriveUrl = driveUrl;
-    } catch (err) {
-      await prisma.design.delete({ where: { id: design.id } }).catch(() => {});
-      throw err;
-    }
-  }
-
-  // Mark the originating ticket done before announcing, so the completion
-  // line can be folded into the same delivery comment below rather than
-  // posting a second, separate comment.
-  if (markDone) {
-    await prisma.ticket.update({ where: { id: ticketId! }, data: { status: "done" } });
-  }
-
-  // Push the new design to every Linear issue tied to this flow, as the
-  // acting designer. Only when there's actually something to announce.
-  const sharedUrl = linkUrl || attachmentUrl;
-  if (sharedUrl || markDone) {
-    const key = await actingLinearKey(session.userId);
-    if (key) {
-      const tickets = await prisma.ticket.findMany({
-        where: { flowId, NOT: { linearUrl: "" } },
-        select: { id: true, linearUrl: true },
-      });
-      // In-app preview page for the uploaded delivery file, if any.
-      const previewUrl = attachmentUrl ? absoluteUrl(attachmentPreviewUrl(attachmentUrl)) : "";
-      // Everything goes in as markdown links so the comment stays two short
-      // lines instead of a wall of raw URLs.
-      const secondary = [
-        linkUrl && `[Claude design link](${linkUrl})`,
-        // Fallback so the delivery is still reachable if the app itself is down.
-        attachmentDriveUrl && `[GD Backup link](${attachmentDriveUrl})`,
-      ].filter(Boolean);
-      for (const t of tickets) {
-        const lines: string[] = [];
-        if (sharedUrl) lines.push(`Design Added: 🔗 [Link here](${previewUrl || sharedUrl})`);
-        if (secondary.length) lines.push(secondary.join(" - "));
-        if (markDone && t.id === ticketId) lines.push("✅ Design completed.");
-        if (lines.length) await postLinearComment(key, t.linearUrl, lines.join("\n"));
-      }
-    }
-  }
+  await deliveries.createDelivery(actor, {
+    title: s(fd, "title"),
+    linkUrl: s(fd, "linkUrl") || s(fd, "claudeUrl"),
+    variant: s(fd, "variant"),
+    flowId: s(fd, "flowId") || null,
+    // Set when delivered from a ticket (board drag-to-done or the ticket detail
+    // page) — lets that ticket show only its own deliverables.
+    ticketId: s(fd, "ticketId") || null,
+    markDone: s(fd, "markDone") === "1",
+    file: file instanceof File ? file : null,
+  });
   revalidateAll();
 }
 
@@ -429,18 +299,10 @@ export async function updateDesign(fd: FormData) {
   const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const design = await prisma.design.findUnique({
-    where: { id },
-    select: { flowId: true },
-  });
-  if (!design || !(await canManageFlow(actor, design.flowId))) return;
-  await prisma.design.update({
-    where: { id },
-    data: {
-      title: s(fd, "title"),
-      claudeUrl: s(fd, "claudeUrl"),
-      variant: s(fd, "variant"),
-    },
+  await deliveries.updateDelivery(actor, id, {
+    title: s(fd, "title"),
+    linkUrl: s(fd, "claudeUrl"),
+    variant: s(fd, "variant"),
   });
   revalidateAll();
 }
@@ -449,17 +311,7 @@ export async function deleteDesign(fd: FormData) {
   const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const design = await prisma.design.findUnique({
-    where: { id },
-    select: { flowId: true },
-  });
-  if (!design || !(await canManageFlow(actor, design.flowId))) return;
-  const attachments = await prisma.designAttachment.findMany({
-    where: { designId: id },
-    select: { path: true },
-  });
-  await prisma.design.delete({ where: { id } });
-  await Promise.all(attachments.map((a) => deleteAttachment(a.path).catch(() => {})));
+  await deliveries.deleteDelivery(actor, id);
   revalidateAll();
 }
 
@@ -468,23 +320,11 @@ export async function deleteDesign(fd: FormData) {
 // design, stored in Google Drive — this only persists the metadata.
 
 export async function addDesignAttachment(fd: FormData) {
-  await requireAuth();
+  const actor = await requireAuth();
   const designId = s(fd, "designId");
   const file = fd.get("file");
   if (!designId || !(file instanceof File) || file.size === 0) return;
-
-  const { path, url } = await uploadAttachment(designId, file);
-  await prisma.designAttachment.create({
-    data: {
-      designId,
-      name: file.name,
-      url,
-      path,
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
-      kind: attachmentKind(file.name, file.type),
-    },
-  });
+  await deliveries.addDeliveryFile(actor, designId, file);
   revalidateAll();
 }
 
@@ -499,51 +339,7 @@ export async function addDesignRevision(fd: FormData) {
   const attachmentId = s(fd, "attachmentId");
   const file = fd.get("file");
   if (!attachmentId || !(file instanceof File) || file.size === 0) return;
-
-  const current = await prisma.designAttachment.findUnique({
-    where: { id: attachmentId },
-    include: { design: { select: { id: true, title: true, flowId: true } } },
-  });
-  if (!current || !(await canManageFlow(actor, current.design.flowId))) return;
-
-  // Versions are numbered per chain, so pick up from whatever is highest —
-  // the button may have been clicked on an older version of the chain.
-  const rootId = current.rootId ?? current.id;
-  const chain = await prisma.designAttachment.findMany({
-    where: { OR: [{ id: rootId }, { rootId }] },
-    orderBy: { version: "asc" },
-  });
-  const nextVersion = Math.max(...chain.map((a) => a.version), 1) + 1;
-
-  const { path, url } = await uploadAttachment(current.design.id, file);
-  await prisma.designAttachment.create({
-    data: {
-      designId: current.design.id,
-      name: file.name,
-      url,
-      path,
-      mimeType: file.type || "application/octet-stream",
-      size: file.size,
-      kind: attachmentKind(file.name, file.type),
-      rootId,
-      version: nextVersion,
-    },
-  });
-
-  // The preview link shared on the first upload is stable across versions, so a
-  // revision points back at that same root link — no Drive backup, no v-number.
-  const key = await actingLinearKey(actor.userId);
-  if (key) {
-    const tickets = await prisma.ticket.findMany({
-      where: { flowId: current.design.flowId, NOT: { linearUrl: "" } },
-      select: { linearUrl: true },
-    });
-    const rootUrl = chain.find((a) => a.id === rootId)?.url ?? url;
-    const body = `Design Updated: 🔗 [Link here](${absoluteUrl(attachmentPreviewUrl(rootUrl))})`;
-    for (const t of tickets) {
-      await postLinearComment(key, t.linearUrl, body);
-    }
-  }
+  await deliveries.addDeliveryRevision(actor, attachmentId, file);
   revalidateAll();
 }
 
@@ -551,100 +347,53 @@ export async function deleteDesignAttachment(fd: FormData) {
   const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const attachment = await prisma.designAttachment.findUnique({
-    where: { id },
-    include: { design: { select: { flowId: true } } },
-  });
-  if (!attachment || !(await canManageFlow(actor, attachment.design.flowId))) return;
-
-  // Removing a deliverable removes every version of it — the UI only ever shows
-  // the newest one, so leaving older revisions (and their Drive files) behind
-  // would just orphan them.
-  const rootId = attachment.rootId ?? attachment.id;
-  const chain = await prisma.designAttachment.findMany({
-    where: { OR: [{ id: rootId }, { rootId }] },
-    select: { id: true, path: true },
-  });
-  await prisma.designAttachment.deleteMany({
-    where: { id: { in: chain.map((a) => a.id) } },
-  });
-  await Promise.all(chain.map((a) => deleteAttachment(a.path).catch(() => {})));
+  await deliveries.deleteDeliveryFile(actor, id);
   revalidateAll();
 }
 
 /* ---------------------------- Tickets --------------------------- */
 
 export async function createTicket(fd: FormData) {
-  const session = await requireAuth();
-  const title = s(fd, "title");
-  if (!title) return;
-  const status = s(fd, "status") || "todo";
-  const linearUrl = s(fd, "linearUrl");
-  const flowId = s(fd, "flowId") || null;
-  await prisma.ticket.create({
-    data: {
-      title,
-      description: s(fd, "description"),
-      status,
-      priority: s(fd, "priority") || "medium",
-      linearUrl,
-      assigneeId: s(fd, "assigneeId") || session.userId,
-      solutionId: s(fd, "solutionId") || null,
-      flowId,
-    },
+  const actor = await requireAuth();
+  if (!s(fd, "title")) return;
+  await tickets.createTicket(actor, {
+    title: s(fd, "title"),
+    description: s(fd, "description"),
+    status: s(fd, "status") || "todo",
+    priority: s(fd, "priority") || "medium",
+    linearUrl: s(fd, "linearUrl"),
+    assigneeId: s(fd, "assigneeId") || null,
+    solutionId: s(fd, "solutionId") || null,
+    flowId: s(fd, "flowId") || null,
   });
-  // Push to Linear (as the acting designer): announce the status if it wasn't
-  // created as a plain "todo". The flow-link comment is intentionally not
-  // posted on creation (only later, when the link/flow changes via update).
-  if (linearUrl) {
-    const key = await actingLinearKey(session.userId);
-    if (status !== "todo") await announceStatus(key, linearUrl, status);
-  }
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
 }
 
 export async function updateTicket(fd: FormData) {
-  const session = await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const prev = await prisma.ticket.findUnique({ where: { id } });
-  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
-  const status = s(fd, "status") || "todo";
-  const linearUrl = s(fd, "linearUrl");
-  const flowId = s(fd, "flowId") || null;
-  await prisma.ticket.update({
-    where: { id },
-    data: {
-      title: s(fd, "title"),
-      description: s(fd, "description"),
-      status,
-      priority: s(fd, "priority") || "medium",
-      linearUrl,
-      assigneeId: s(fd, "assigneeId") || null,
-      solutionId: s(fd, "solutionId") || null,
-      flowId,
-    },
-  });
-  await syncTicketChanges(await actingLinearKey(session.userId), prev, {
-    linearUrl,
-    flowId,
-    status,
+  await tickets.updateTicket(actor, id, {
+    title: s(fd, "title"),
+    description: s(fd, "description"),
+    status: s(fd, "status") || "todo",
+    priority: s(fd, "priority") || "medium",
+    linearUrl: s(fd, "linearUrl"),
+    assigneeId: s(fd, "assigneeId") || null,
+    solutionId: s(fd, "solutionId") || null,
+    flowId: s(fd, "flowId") || null,
   });
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
 }
 
 export async function setTicketStatus(fd: FormData) {
-  const session = await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   const status = s(fd, "status");
   if (!id || !status) return;
-  const prev = await prisma.ticket.findUnique({ where: { id } });
-  await prisma.ticket.update({ where: { id }, data: { status } });
-  if (prev && prev.status !== status) {
-    await announceStatus(await actingLinearKey(session.userId), prev.linearUrl, status);
-  }
+  await tickets.setTicketStatus(actor, id, status);
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
   revalidatePath(`/manage/tickets/${id}`);
@@ -654,12 +403,7 @@ export async function deleteTicket(fd: FormData) {
   const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const ticket = await prisma.ticket.findUnique({
-    where: { id },
-    select: { flowId: true, assigneeId: true },
-  });
-  if (!ticket || !(await canManageFlow(actor, ticket.flowId, ticket.assigneeId))) return;
-  await prisma.ticket.delete({ where: { id } });
+  await tickets.deleteTicket(actor, id);
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
 }
@@ -668,31 +412,19 @@ export async function deleteTicket(fd: FormData) {
 // touch the hierarchy location (solution/flow) — that's edited from the board
 // where the hierarchy picker lives, so we never accidentally clear it here.
 export async function updateTicketDetails(fd: FormData) {
-  const session = await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const prev = await prisma.ticket.findUnique({ where: { id } });
-  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
-  const status = s(fd, "status") || "todo";
-  // The Linear link is edited from its own sidebar card (linkTicketLinear), so
-  // a form that doesn't carry the field leaves the existing link untouched.
-  const linearUrl = fd.has("linearUrl") ? s(fd, "linearUrl") : prev.linearUrl;
-  await prisma.ticket.update({
-    where: { id },
-    data: {
-      title: s(fd, "title"),
-      description: s(fd, "description"),
-      status,
-      priority: s(fd, "priority") || "medium",
-      linearUrl,
-      assigneeId: s(fd, "assigneeId") || null,
-    },
-  });
-  // Hierarchy isn't edited here, so the flow stays whatever it already was.
-  await syncTicketChanges(await actingLinearKey(session.userId), prev, {
-    linearUrl,
-    flowId: prev?.flowId ?? null,
-    status,
+  await tickets.updateTicket(actor, id, {
+    title: s(fd, "title"),
+    description: s(fd, "description"),
+    status: s(fd, "status") || "todo",
+    priority: s(fd, "priority") || "medium",
+    // The Linear link is edited from its own sidebar card (linkTicketLinear), so
+    // a form that doesn't carry the field leaves the existing link untouched.
+    ...(fd.has("linearUrl") ? { linearUrl: s(fd, "linearUrl") } : {}),
+    assigneeId: s(fd, "assigneeId") || null,
+    // Hierarchy isn't edited here, so solution/flow stay whatever they were.
   });
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
@@ -703,45 +435,30 @@ export async function updateTicketDetails(fd: FormData) {
 // page. The picker can create the solution/module/submodule/flow inline, so a
 // ticket that was filed without a flow can get one without leaving the page.
 export async function setTicketLocation(fd: FormData) {
-  const session = await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const prev = await prisma.ticket.findUnique({ where: { id } });
-  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
-  const solutionId = s(fd, "solutionId") || null;
   const flowId = s(fd, "flowId") || null;
   if (!flowId) throw new Error("Pick or create a flow first.");
-  await prisma.ticket.update({
-    where: { id },
-    data: { solutionId, flowId },
-  });
   // A newly attached flow gets the flow-link comment on the Linear issue.
-  await syncTicketChanges(await actingLinearKey(session.userId), prev, {
-    linearUrl: prev.linearUrl,
+  await tickets.updateTicket(actor, id, {
+    solutionId: s(fd, "solutionId") || null,
     flowId,
-    status: prev.status,
   });
   revalidateAll();
 }
 
 // Attach, replace or clear the Linear issue on a ticket from the detail page.
 export async function linkTicketLinear(fd: FormData) {
-  const session = await requireAuth();
+  const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const prev = await prisma.ticket.findUnique({ where: { id } });
-  if (!prev || !(await canManageFlow(session, prev.flowId, prev.assigneeId))) return;
   const linearUrl = s(fd, "linearUrl");
   if (linearUrl && !/linear\.app\//i.test(linearUrl)) {
     throw new Error("That doesn't look like a Linear link.");
   }
-  await prisma.ticket.update({ where: { id }, data: { linearUrl } });
   // Fresh link → flow-link comment (when there's a flow) + current status.
-  await syncTicketChanges(await actingLinearKey(session.userId), prev, {
-    linearUrl,
-    flowId: prev.flowId,
-    status: prev.status,
-  });
+  await tickets.updateTicket(actor, id, { linearUrl });
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
   revalidatePath(`/manage/tickets/${id}`);
@@ -751,12 +468,7 @@ export async function deleteTicketAndRedirect(fd: FormData) {
   const actor = await requireAuth();
   const id = s(fd, "id");
   if (!id) return;
-  const ticket = await prisma.ticket.findUnique({
-    where: { id },
-    select: { flowId: true, assigneeId: true },
-  });
-  if (!ticket || !(await canManageFlow(actor, ticket.flowId, ticket.assigneeId))) return;
-  await prisma.ticket.delete({ where: { id } });
+  await tickets.deleteTicket(actor, id);
   revalidatePath("/manage");
   revalidatePath("/manage/tickets");
   redirect("/manage/tickets");
@@ -831,13 +543,11 @@ export async function generateDesignPrompt(
 /* ---------------------------- Comments -------------------------- */
 
 export async function addComment(fd: FormData) {
-  const session = await requireAuth();
+  const actor = await requireAuth();
   const ticketId = s(fd, "ticketId");
   const body = s(fd, "body");
   if (!ticketId || !body) return;
-  await prisma.comment.create({
-    data: { ticketId, body, authorId: session.userId },
-  });
+  await tickets.addComment(actor, ticketId, body);
   revalidatePath(`/manage/tickets/${ticketId}`);
 }
 

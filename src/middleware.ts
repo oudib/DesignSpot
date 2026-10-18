@@ -6,10 +6,13 @@ export async function middleware(req: NextRequest) {
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value;
   const session = await verifyToken(token);
   const isLoginPage = req.nextUrl.pathname === "/login";
-  // OAuth endpoints must be reachable while logged out.
+  // OAuth endpoints must be reachable while logged out, and the REST API
+  // authenticates with a bearer API key instead of the session cookie (each
+  // /api/v1 route checks it; see src/lib/apiAuth.ts).
   const isAuthRoute = req.nextUrl.pathname.startsWith("/api/auth/");
+  const isPublicApi = req.nextUrl.pathname.startsWith("/api/v1");
 
-  if (isAuthRoute) {
+  if (isAuthRoute || isPublicApi) {
     return NextResponse.next();
   }
 
