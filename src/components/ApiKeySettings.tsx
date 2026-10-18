@@ -40,7 +40,8 @@ function claudeInstructions(baseUrl: string, key: string) {
     `Base URL: ${base}/api/v1`,
     `Auth header on every request: Authorization: Bearer ${key}`,
     `Start with GET ${base}/api/v1 for the endpoint list, GET /me to see who you act as,`,
-    `GET /structure for solution/flow ids, GET /users for assignee ids, then GET/POST/PATCH /tickets`,
+    `GET /structure for solution/flow ids (POST /solutions, /modules, /submodules, /flows to add missing ones),`,
+    `GET /users for assignee ids, then GET/POST/PATCH /tickets`,
     `and POST /tickets/{id}/deliveries (JSON for a link, multipart with a \`file\` field to upload).`,
     `Full reference: https://github.com/oudib/DesignSpot/blob/main/docs/API.md`,
   ].join("\n");

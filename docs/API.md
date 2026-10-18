@@ -43,7 +43,15 @@ removing the owner's workspace access, stops it immediately.
 | GET | `/me` | `{ user, apiKey }` — who this key acts as |
 | GET | `/users` | `{ users: [{ id, name, email, role }] }` for `assigneeId` |
 | GET | `/structure` | `{ solutions: [{ id, name, modules: [{ id, name, submodules: [{ id, name, flows: [{ id, name, description }] }] }] }] }` |
-| POST | `/flows` | Create a flow: `{ submoduleId, name, description? }` → `{ flow }` |
+| POST | `/solutions` | `{ name, tagline?, description?, color?, icon?, language? }` → `{ solution }` |
+| POST | `/modules` | `{ solutionId, name }` → `{ module }` |
+| POST | `/submodules` | `{ moduleId, name }` → `{ submodule }` |
+| POST | `/flows` | `{ submoduleId, name, description? }` → `{ flow }` |
+
+Slugs are derived from the name and de-duplicated, so creating "Checkout"
+twice under one submodule is fine. To file a ticket somewhere new, walk the
+chain top-down: find or create the solution → module → submodule → flow, then
+use the flow's id as the ticket's `flowId`.
 
 ## Tickets
 
@@ -98,6 +106,11 @@ or both, optionally tied to the ticket it fulfils.
 `markDone: true` (with a ticket) also sets that ticket to `done`, in the same
 Linear comment as the delivery.
 
+A ticket that has **no flow yet** can still be delivered: pass `flowId` and the
+ticket is attached to that flow (and its solution) as part of the delivery,
+exactly as if you had picked the flow on the ticket page. Without a `flowId`
+such a delivery is rejected with a `400` that says so.
+
 A delivery looks like:
 
 ```json
@@ -131,6 +144,14 @@ curl -s "$SDS/me" -H "Authorization: Bearer $KEY"
 
 # My open tickets
 curl -s "$SDS/tickets?status=in_progress" -H "Authorization: Bearer $KEY"
+
+# Build the path for a brand-new feature, then file the ticket there
+curl -s -X POST "$SDS/modules" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"solutionId":"<solutionId>","name":"Checkout"}'
+curl -s -X POST "$SDS/submodules" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"moduleId":"<moduleId>","name":"Payment"}'
+curl -s -X POST "$SDS/flows" -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"submoduleId":"<submoduleId>","name":"Card payment"}'
 
 # Create a ticket on a flow
 curl -s -X POST "$SDS/tickets" -H "Authorization: Bearer $KEY" \

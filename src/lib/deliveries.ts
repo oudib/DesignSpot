@@ -10,7 +10,7 @@ import { canManageFlow } from "@/lib/access";
 import type { Actor } from "@/lib/utils";
 import { badRequest, forbidden, notFound } from "@/lib/errors";
 import { postLinearComment, absoluteUrl } from "@/lib/linear";
-import { actingLinearKey } from "@/lib/linearSync";
+import { actingLinearKey, linkFlowToLinear } from "@/lib/linearSync";
 import { uploadAttachment, deleteAttachment, attachmentKind } from "@/lib/storage";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
 
@@ -66,22 +66,37 @@ export async function createDelivery(actor: DeliveryActor, input: DeliveryInput)
   const ticketId = input.ticketId || null;
 
   let flowId = input.flowId || null;
+  let ticket: { flowId: string | null; linearUrl: string } | null = null;
   if (ticketId) {
-    const ticket = await prisma.ticket.findUnique({
+    ticket = await prisma.ticket.findUnique({
       where: { id: ticketId },
-      select: { flowId: true },
+      select: { flowId: true, linearUrl: true },
     });
     if (!ticket) throw notFound("Ticket not found.");
     if (!flowId) flowId = ticket.flowId;
     if (!flowId) {
       throw badRequest(
-        "That ticket has no flow yet. Set the ticket's flowId first (PATCH /api/v1/tickets/{id}) or pass flowId here."
+        "That ticket has no flow yet. Pass flowId here (the ticket will be attached to it), " +
+          "or set it first with PATCH /api/v1/tickets/{id}. Create one with POST /api/v1/flows if needed."
       );
     }
   }
   if (!flowId) throw badRequest("flowId (or a ticketId whose ticket has a flow) is required.");
-  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { id: true } });
+  const flow = await prisma.flow.findUnique({
+    where: { id: flowId },
+    select: { id: true, submodule: { select: { module: { select: { solutionId: true } } } } },
+  });
   if (!flow) throw badRequest(`No flow with id "${flowId}".`);
+
+  // Delivering a flow-less ticket into a flow is how that ticket gets its
+  // place in the hierarchy — same as picking a flow on the ticket page.
+  if (ticket && ticketId && !ticket.flowId) {
+    await prisma.ticket.update({
+      where: { id: ticketId },
+      data: { flowId, solutionId: flow.submodule.module.solutionId },
+    });
+    await linkFlowToLinear(await actingLinearKey(actor.userId), ticket.linearUrl, flowId);
+  }
 
   const markDone = !!input.markDone && !!ticketId;
   const count = await prisma.design.count({ where: { flowId } });

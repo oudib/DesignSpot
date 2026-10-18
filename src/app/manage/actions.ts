@@ -11,6 +11,7 @@ import { encryptSecret } from "@/lib/crypto";
 import { actingLinearKey } from "@/lib/linearSync";
 import * as tickets from "@/lib/tickets";
 import * as deliveries from "@/lib/deliveries";
+import * as structure from "@/lib/structure";
 
 // Ticket and delivery mutations are thin wrappers over src/lib/tickets.ts and
 // src/lib/deliveries.ts — the same functions back the REST API in /api/v1, so
@@ -561,93 +562,33 @@ export async function deleteComment(fd: FormData) {
 
 /* ------------- Quick-create (used by the ticket picker) -------------- */
 // These accept plain string args, create the record, and RETURN the new
-// row so the client can append it to the dropdowns and select it.
-
-const PALETTE = [
-  "#1f47eb", "#0ea5a3", "#f97316", "#a855f7",
-  "#e11d48", "#2563eb", "#059669", "#0f172a",
-];
-
-async function uniqueSlug(
-  base: string,
-  exists: (slug: string) => Promise<boolean>
-) {
-  const root = base || "item";
-  let slug = root;
-  let n = 2;
-  while (await exists(slug)) slug = `${root}-${n++}`;
-  return slug;
-}
+// row so the client can append it to the dropdowns and select it. The
+// creation itself lives in src/lib/structure.ts, shared with /api/v1.
 
 export async function quickCreateSolution(name: string) {
   await requireAuth();
-  const clean = name.trim();
-  if (!clean) throw new Error("Name required");
-  const count = await prisma.solution.count();
-  const slug = await uniqueSlug(
-    slugify(clean),
-    async (sl) => !!(await prisma.solution.findUnique({ where: { slug: sl } }))
-  );
-  const row = await prisma.solution.create({
-    data: {
-      name: clean,
-      slug,
-      color: PALETTE[count % PALETTE.length],
-      icon: "✦",
-      language: "en",
-      order: count,
-    },
-  });
+  const row = await structure.createSolution({ name });
   revalidateAll();
   return { id: row.id, name: row.name };
 }
 
 export async function quickCreateModule(solutionId: string, name: string) {
   await requireAuth();
-  const clean = name.trim();
-  if (!clean || !solutionId) throw new Error("Missing data");
-  const count = await prisma.module.count({ where: { solutionId } });
-  const slug = await uniqueSlug(
-    slugify(clean),
-    async (sl) =>
-      !!(await prisma.module.findUnique({
-        where: { solutionId_slug: { solutionId, slug: sl } },
-      }))
-  );
-  const row = await prisma.module.create({
-    data: { name: clean, slug, solutionId, order: count },
-  });
+  const row = await structure.createModule({ solutionId, name });
   revalidateAll();
   return { id: row.id, name: row.name };
 }
 
 export async function quickCreateSubmodule(moduleId: string, name: string) {
   await requireAuth();
-  const clean = name.trim();
-  if (!clean || !moduleId) throw new Error("Missing data");
-  const count = await prisma.submodule.count({ where: { moduleId } });
-  const slug = await uniqueSlug(
-    slugify(clean),
-    async (sl) =>
-      !!(await prisma.submodule.findUnique({
-        where: { moduleId_slug: { moduleId, slug: sl } },
-      }))
-  );
-  const row = await prisma.submodule.create({
-    data: { name: clean, slug, moduleId, order: count },
-  });
+  const row = await structure.createSubmodule({ moduleId, name });
   revalidateAll();
   return { id: row.id, name: row.name };
 }
 
 export async function quickCreateFlow(submoduleId: string, name: string) {
   await requireAuth();
-  const clean = name.trim();
-  if (!clean || !submoduleId) throw new Error("Missing data");
-  const count = await prisma.flow.count({ where: { submoduleId } });
-  const row = await prisma.flow.create({
-    data: { name: clean, submoduleId, order: count },
-  });
+  const row = await structure.createFlow({ submoduleId, name });
   revalidateAll();
   return { id: row.id, name: row.name };
 }
