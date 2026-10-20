@@ -9,7 +9,7 @@ import { prisma } from "@/lib/db";
 import { canManageFlow } from "@/lib/access";
 import type { Actor } from "@/lib/utils";
 import { badRequest, forbidden, notFound } from "@/lib/errors";
-import { postLinearComment, absoluteUrl } from "@/lib/linear";
+import { postLinearComment, deleteLinearCommentsWithPrefix, absoluteUrl } from "@/lib/linear";
 import { actingLinearKey, linkFlowToLinear } from "@/lib/linearSync";
 import { uploadAttachment, deleteAttachment, attachmentKind } from "@/lib/storage";
 import { attachmentPreviewUrl } from "@/lib/attachmentUrl";
@@ -236,8 +236,12 @@ export async function addDeliveryRevision(
       select: { linearUrl: true },
     });
     const rootUrl = chain.find((a) => a.id === rootId)?.url ?? row.url;
-    const body = `Design Updated: 🔗 [Link here](${absoluteUrl(attachmentPreviewUrl(rootUrl))})`;
+    const prefix = "Design Updated:";
+    const body = `${prefix} 🔗 [Link here](${absoluteUrl(attachmentPreviewUrl(rootUrl))})`;
     for (const t of tickets) {
+      // Only the latest notice matters, so clear the earlier ones instead of
+      // stacking a near-identical comment on every revision.
+      await deleteLinearCommentsWithPrefix(key, t.linearUrl, prefix);
       await postLinearComment(key, t.linearUrl, body);
     }
   }

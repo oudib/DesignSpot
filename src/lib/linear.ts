@@ -187,3 +187,38 @@ export async function postLinearComment(
     console.error("[linear] postComment failed:", err);
   }
 }
+
+/**
+ * Delete every comment on the issue whose body starts with `prefix`. Used to
+ * replace a recurring notice (e.g. "Design Updated:") instead of stacking a
+ * new copy under the old ones. Best-effort: comments the key may not delete
+ * (another member's, on a non-admin key) are logged and left in place.
+ */
+export async function deleteLinearCommentsWithPrefix(
+  apiKey: string | null | undefined,
+  issueUrl: string,
+  prefix: string
+): Promise<void> {
+  try {
+    if (!apiKey || !issueUrl || !prefix) return;
+    const issueId = await resolveIssueId(apiKey, issueUrl);
+    if (!issueId) return;
+    const data = await gql<{ issue: { comments: { nodes: { id: string; body: string }[] } } }>(
+      apiKey,
+      `query($id:String!){
+        issue(id:$id){ comments(first:100){ nodes { id body } } }
+      }`,
+      { id: issueId }
+    );
+    const stale = (data?.issue.comments.nodes ?? []).filter((c) =>
+      c.body.trimStart().startsWith(prefix)
+    );
+    for (const c of stale) {
+      await gql(apiKey, `mutation($id:String!){ commentDelete(id:$id){ success } }`, {
+        id: c.id,
+      });
+    }
+  } catch (err) {
+    console.error("[linear] deleteCommentsWithPrefix failed:", err);
+  }
+}
