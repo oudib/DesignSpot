@@ -1,7 +1,10 @@
+import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import Logo from "@/components/Logo";
+import DeliverySwitcher from "@/components/DeliverySwitcher";
+import PreviewFrame from "@/components/PreviewFrame";
 import { groupRevisions } from "@/lib/revisions";
 
 function fmtDate(d: Date) {
@@ -17,19 +20,12 @@ function fmtDate(d: Date) {
  * first. A preview link shared in Linear points at whichever version existed
  * when it was posted, so the chain is resolved from that row.
  */
-async function revisionChain(driveId: string) {
-  const requested = await prisma.designAttachment.findFirst({
-    where: { path: driveId },
-    include: { design: { include: { ticket: { include: { assignee: true } } } } },
-  });
-  if (!requested) return null;
-
+async function revisionChain(requested: { id: string; rootId: string | null }) {
   const rootId = requested.rootId ?? requested.id;
-  const chain = await prisma.designAttachment.findMany({
+  return prisma.designAttachment.findMany({
     where: { OR: [{ id: rootId }, { rootId }] },
     orderBy: { version: "asc" },
   });
-  return { requested, chain };
 }
 
 /**
@@ -109,16 +105,33 @@ function deliveryLabels(
   return byFile.map((l, i) => `${l} · ${fmtDate(deliveries[i].createdAt)}`);
 }
 
+/**
+ * Everything the page needs, in two round trips: the requested attachment,
+ * then its revision chain and sibling deliveries side by side. Cached per
+ * request so generateMetadata shares the lookup instead of querying again —
+ * each round trip to the database is noticeable when switching deliveries.
+ */
+const loadPreview = cache(async (driveId: string) => {
+  const requested = await prisma.designAttachment.findFirst({
+    where: { path: driveId },
+    include: { design: { include: { ticket: { include: { assignee: true } } } } },
+  });
+  if (!requested) return null;
+  const [chain, deliveries] = await Promise.all([
+    revisionChain(requested),
+    siblingDeliveries(requested.design),
+  ]);
+  return { requested, chain, deliveries };
+});
+
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const attachment = await prisma.designAttachment.findFirst({
-    where: { path: id },
-  });
-  return { title: attachment?.name ?? "Preview" };
+  const loaded = await loadPreview(id);
+  return { title: loaded?.requested.name ?? "Preview" };
 }
 
 export default async function AttachmentPreviewPage({
@@ -131,9 +144,9 @@ export default async function AttachmentPreviewPage({
   const { id } = await params;
   const { exact } = await searchParams;
 
-  const resolved = await revisionChain(id);
-  if (!resolved) notFound();
-  const { requested, chain } = resolved;
+  const loaded = await loadPreview(id);
+  if (!loaded) notFound();
+  const { requested, chain, deliveries } = loaded;
 
   const newest = chain[chain.length - 1] ?? requested;
   // `?exact=1` pins the page to the version in the URL — used by the history
@@ -144,9 +157,16 @@ export default async function AttachmentPreviewPage({
 
   const design = requested.design;
   const owner = design.ticket?.assignee?.name ?? "Unassigned";
-  const deliveries = await siblingDeliveries(design);
   const hasSiblings = deliveries.length > 1;
   const labels = deliveryLabels(deliveries);
+  const tabs = deliveries.map((d, i) => ({
+    id: d.id,
+    href: `/preview/${d.path}`,
+    label: labels[i],
+    title: d.variant ? `${d.title} · ${d.variant}` : d.title,
+    badge:
+      d.variant && d.variant.toLowerCase() !== labels[i].toLowerCase() ? d.variant : undefined,
+  }));
 
   return (
     <div className="flex h-screen flex-col">
@@ -168,34 +188,7 @@ export default async function AttachmentPreviewPage({
             </p>
           </div>
         </div>
-        {hasSiblings && (
-          <nav
-            aria-label="Deliveries"
-            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1"
-          >
-            {deliveries.map((d, i) => {
-              const isCurrent = d.id === design.id;
-              return (
-                <Link
-                  key={d.id}
-                  href={`/preview/${d.path}`}
-                  aria-current={isCurrent ? "page" : undefined}
-                  title={d.variant ? `${d.title} · ${d.variant}` : d.title}
-                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition ${
-                    isCurrent
-                      ? "bg-white font-semibold text-brand-700 shadow-sm"
-                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
-                  }`}
-                >
-                  <span className="max-w-[14rem] truncate">{labels[i]}</span>
-                  {d.variant && d.variant.toLowerCase() !== labels[i].toLowerCase() && (
-                    <span className="badge bg-slate-200 text-slate-600">{d.variant}</span>
-                  )}
-                </Link>
-              );
-            })}
-          </nav>
-        )}
+        {hasSiblings && <DeliverySwitcher tabs={tabs} currentId={design.id} />}
         <div className="flex shrink-0 items-center gap-2">
           {hasHistory && (
             <details className="relative">
@@ -250,12 +243,7 @@ export default async function AttachmentPreviewPage({
         </p>
       )}
 
-      <iframe
-        src={`/api/files/${shown.path}`}
-        title={shown.name}
-        sandbox="allow-scripts allow-popups"
-        className="min-h-0 flex-1 border-0"
-      />
+      <PreviewFrame key={shown.path} src={`/api/files/${shown.path}`} title={shown.name} />
     </div>
   );
 }
