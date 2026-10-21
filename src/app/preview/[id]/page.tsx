@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import Logo from "@/components/Logo";
+import { groupRevisions } from "@/lib/revisions";
 
 function fmtDate(d: Date) {
   return new Date(d).toLocaleDateString("en-GB", {
@@ -29,6 +30,58 @@ async function revisionChain(driveId: string) {
     orderBy: { version: "asc" },
   });
   return { requested, chain };
+}
+
+/**
+ * The other deliveries a reviewer may want to flip to from this preview: every
+ * design delivered for the same ticket (or, for a design with no ticket, every
+ * design in the same flow) that has a previewable file. Each entry points at
+ * the newest version of that delivery's main file — an HTML export when there
+ * is one, otherwise its first file.
+ */
+async function siblingDeliveries(design: {
+  id: string;
+  flowId: string;
+  ticketId: string | null;
+}) {
+  const designs = await prisma.design.findMany({
+    where: design.ticketId ? { ticketId: design.ticketId } : { flowId: design.flowId },
+    orderBy: [{ order: "asc" }, { createdAt: "asc" }],
+    include: { attachments: { orderBy: { createdAt: "asc" } } },
+  });
+  return designs.flatMap((d) => {
+    const latest = groupRevisions(d.attachments).map((g) => g.latest);
+    const main = latest.find((a) => a.kind === "html") ?? latest[0];
+    if (!main) return [];
+    return [{ id: d.id, title: d.title, variant: d.variant, path: main.path }];
+  });
+}
+
+/**
+ * Sibling deliveries are usually named "Feature - Screen A", "Feature - Screen
+ * B"… so the tabs show only the part that differs. Returns the full titles when
+ * there is no shared lead-in or stripping it would leave a tab blank.
+ */
+function distinctLabels(titles: string[]): string[] {
+  if (titles.length < 2) return titles;
+  let prefix = titles[0];
+  for (const t of titles.slice(1)) {
+    let i = 0;
+    while (i < prefix.length && i < t.length && prefix[i] === t[i]) i++;
+    prefix = prefix.slice(0, i);
+  }
+  // Only cut at a word boundary, so "Error Logs - Details" vs "Error Logs - List"
+  // becomes "Details" / "List" and never "s - Details".
+  const sep = /[\s\-–—·:/|]/;
+  const atBoundary = titles.every((t) => t.length === prefix.length || sep.test(t[prefix.length]));
+  let lead = prefix;
+  if (!atBoundary) {
+    const cut = prefix.search(/[\s\-–—·:/|]+[^\s\-–—·:/|]*$/);
+    lead = cut > 0 ? prefix.slice(0, cut) : "";
+  }
+  if (!lead) return titles;
+  const rest = titles.map((t) => t.slice(lead.length).replace(/^[\s\-–—·:/|]+/, "").trim());
+  return rest.every(Boolean) ? rest : titles;
 }
 
 export async function generateMetadata({
@@ -66,6 +119,9 @@ export default async function AttachmentPreviewPage({
 
   const design = requested.design;
   const owner = design.ticket?.assignee?.name ?? "Unassigned";
+  const deliveries = await siblingDeliveries(design);
+  const hasSiblings = deliveries.length > 1;
+  const labels = distinctLabels(deliveries.map((d) => d.title));
 
   return (
     <div className="flex h-screen flex-col">
@@ -87,6 +143,34 @@ export default async function AttachmentPreviewPage({
             </p>
           </div>
         </div>
+        {hasSiblings && (
+          <nav
+            aria-label="Deliveries"
+            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1"
+          >
+            {deliveries.map((d, i) => {
+              const isCurrent = d.id === design.id;
+              return (
+                <Link
+                  key={d.id}
+                  href={`/preview/${d.path}`}
+                  aria-current={isCurrent ? "page" : undefined}
+                  title={d.variant ? `${d.title} · ${d.variant}` : d.title}
+                  className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition ${
+                    isCurrent
+                      ? "bg-white font-semibold text-brand-700 shadow-sm"
+                      : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+                  }`}
+                >
+                  <span className="max-w-[14rem] truncate">{labels[i]}</span>
+                  {d.variant && d.variant.toLowerCase() !== labels[i].toLowerCase() && (
+                    <span className="badge bg-slate-200 text-slate-600">{d.variant}</span>
+                  )}
+                </Link>
+              );
+            })}
+          </nav>
+        )}
         <div className="flex shrink-0 items-center gap-2">
           {hasHistory && (
             <details className="relative">
