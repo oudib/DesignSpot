@@ -53,7 +53,16 @@ async function siblingDeliveries(design: {
     const latest = groupRevisions(d.attachments).map((g) => g.latest);
     const main = latest.find((a) => a.kind === "html") ?? latest[0];
     if (!main) return [];
-    return [{ id: d.id, title: d.title, variant: d.variant, path: main.path }];
+    return [
+      {
+        id: d.id,
+        title: d.title,
+        variant: d.variant,
+        path: main.path,
+        fileName: main.name.replace(/\.[a-z0-9]+$/i, ""),
+        createdAt: d.createdAt,
+      },
+    ];
   });
 }
 
@@ -82,6 +91,22 @@ function distinctLabels(titles: string[]): string[] {
   if (!lead) return titles;
   const rest = titles.map((t) => t.slice(lead.length).replace(/^[\s\-–—·:/|]+/, "").trim());
   return rest.every(Boolean) ? rest : titles;
+}
+
+/**
+ * Tab labels for the delivery switcher. Titles first; when two deliveries
+ * share a title (the common case for "Add delivery" on the same ticket), fall
+ * back to their file names, and as a last resort suffix the delivery date.
+ */
+function deliveryLabels(
+  deliveries: { title: string; variant: string; fileName: string; createdAt: Date }[]
+): string[] {
+  const unique = (xs: string[]) => new Set(xs).size === xs.length;
+  const withVariant = deliveries.map((d) => (d.variant ? `${d.title} ${d.variant}` : d.title));
+  if (unique(withVariant)) return distinctLabels(deliveries.map((d) => d.title));
+  const byFile = distinctLabels(deliveries.map((d) => d.fileName));
+  if (unique(byFile)) return byFile;
+  return byFile.map((l, i) => `${l} · ${fmtDate(deliveries[i].createdAt)}`);
 }
 
 export async function generateMetadata({
@@ -121,7 +146,7 @@ export default async function AttachmentPreviewPage({
   const owner = design.ticket?.assignee?.name ?? "Unassigned";
   const deliveries = await siblingDeliveries(design);
   const hasSiblings = deliveries.length > 1;
-  const labels = distinctLabels(deliveries.map((d) => d.title));
+  const labels = deliveryLabels(deliveries);
 
   return (
     <div className="flex h-screen flex-col">
