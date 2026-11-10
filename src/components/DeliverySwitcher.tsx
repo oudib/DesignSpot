@@ -16,8 +16,8 @@ export type DeliveryTab = {
 };
 
 /**
- * Segmented control in the preview header for flipping between the
- * deliveries of one ticket. Switching is a full server render against the
+ * Row of small buttons in the preview header for flipping between the
+ * deliveries of one ticket (the current one is filled). Switching is a full server render against the
  * database plus a Drive stream, so the clicked tab shows a spinner until the
  * new page is on screen — otherwise the click feels ignored.
  */
@@ -49,7 +49,7 @@ export default function DeliverySwitcher({
     <nav
       aria-label="Deliveries"
       aria-busy={busy || undefined}
-      className={`flex max-w-full items-center gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1 ${
+      className={`flex max-w-full items-center gap-1.5 overflow-x-auto ${
         busy ? "cursor-progress" : ""
       }`}
     >
@@ -63,16 +63,22 @@ export default function DeliverySwitcher({
             onClick={(e) => go(tab, e)}
             aria-current={isCurrent ? "page" : undefined}
             title={tab.title}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition ${
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
               isCurrent || isLoading
-                ? "bg-white font-semibold text-brand-700 shadow-sm"
-                : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+                ? "border-brand-600 bg-brand-600 text-white"
+                : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900"
             } ${busy && !isLoading ? "opacity-60" : ""}`}
           >
-            {isLoading && <Spinner size={13} className="shrink-0 text-brand-600" />}
-            <span className="max-w-[14rem] truncate">{tab.label}</span>
+            {isLoading && <Spinner size={12} className="shrink-0 text-white" />}
+            <span className="max-w-[12rem] truncate">{tab.label}</span>
             {tab.badge && (
-              <span className="badge bg-slate-200 text-slate-600">{tab.badge}</span>
+              <span
+                className={`badge !px-1.5 !py-0 !text-[10px] ${
+                  isCurrent || isLoading ? "bg-white/20 text-white" : "bg-slate-200 text-slate-600"
+                }`}
+              >
+                {tab.badge}
+              </span>
             )}
           </Link>
         );
