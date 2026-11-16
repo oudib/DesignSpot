@@ -35,7 +35,7 @@ export default function PreviewFrame({ src, title }: { src: string; title: strin
       <iframe
         src={src}
         title={title}
-        sandbox="allow-scripts allow-popups"
+        sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
         onLoad={() => setLoaded(true)}
         className="h-full w-full border-0"
       />

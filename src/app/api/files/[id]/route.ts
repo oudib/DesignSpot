@@ -41,7 +41,7 @@ export async function GET(
   // Standalone HTML exports render in the browser, but sandboxed so an
   // uploaded page can never touch the app's origin (cookies, storage).
   if (attachment.kind === "html") {
-    headers.set("Content-Security-Policy", "sandbox allow-scripts allow-popups");
+    headers.set("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox");
   }
 
   return new Response(upstream.body, { headers });
