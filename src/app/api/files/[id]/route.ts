@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { fetchAttachment } from "@/lib/storage";
+import { withOutsideLinksInNewTab } from "@/lib/previewLinks";
 
 // Streams a design attachment from Google Drive. Files in Drive stay
 // private (only the service account can read them); this route is the only
@@ -30,19 +31,27 @@ export async function GET(
 
   // The preview page's "Download" button links here with ?download=1 to
   // force a save-as instead of the default inline render.
-  const disposition = req.nextUrl.searchParams.has("download") ? "attachment" : "inline";
+  const download = req.nextUrl.searchParams.has("download");
+  const disposition = download ? "attachment" : "inline";
   const headers = new Headers({
     "Content-Type": attachment.mimeType || "application/octet-stream",
     "Content-Disposition": `${disposition}; filename="${encodeURIComponent(attachment.name)}"`,
     // Attachments never change once uploaded (a new upload gets a new id).
     "Cache-Control": "private, max-age=3600",
   });
-  if (attachment.size > 0) headers.set("Content-Length", String(attachment.size));
   // Standalone HTML exports render in the browser, but sandboxed so an
   // uploaded page can never touch the app's origin (cookies, storage).
   if (attachment.kind === "html") {
     headers.set("Content-Security-Policy", "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox");
   }
 
+  // Rendered HTML gets a small script appended so links to other sites open
+  // in a new tab (see previewLinks). Its length differs from the stored size,
+  // so that response goes out without a Content-Length.
+  if (attachment.kind === "html" && !download && upstream.body) {
+    return new Response(withOutsideLinksInNewTab(upstream.body), { headers });
+  }
+
+  if (attachment.size > 0) headers.set("Content-Length", String(attachment.size));
   return new Response(upstream.body, { headers });
 }
