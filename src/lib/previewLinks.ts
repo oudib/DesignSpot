@@ -24,6 +24,9 @@ const SCRIPT = `
 </script>
 `;
 
+/** The appended script's source, so the file route can version its cache on it. */
+export const PREVIEW_SCRIPT_SOURCE = SCRIPT;
+
 const TAIL = new TextEncoder().encode(SCRIPT);
 
 /** Append the outside-link script to a streamed HTML body, without buffering it. */
